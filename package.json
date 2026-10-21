@@ -1,0 +1,16 @@
+{
+  "name": "bit-smartfleet",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BIT SmartFleet: An Intelligent Centralized Vehicle Fleet Management and Trip Optimization System for Institutional Transportation",
+  "scripts": {
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "build": "npm run build --prefix client",
+    "seed": "npm run seed --prefix server",
+    "test": "npm test --prefix server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}

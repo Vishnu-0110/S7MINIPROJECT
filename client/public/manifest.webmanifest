@@ -1,0 +1,17 @@
+{
+  "name": "BIT SmartFleet",
+  "short_name": "SmartFleet",
+  "description": "Institutional fleet management and trip optimization",
+  "theme_color": "#0f172a",
+  "background_color": "#f8fafc",
+  "display": "standalone",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "64x64",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

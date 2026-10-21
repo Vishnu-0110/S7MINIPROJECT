@@ -1,0 +1,148 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #0f172a;
+  background: #f1f5f9;
+  font-synthesis: none;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 85% -10%, rgba(45, 212, 191, 0.16), transparent 26rem),
+    radial-gradient(circle at 5% 30%, rgba(59, 130, 246, 0.12), transparent 24rem),
+    #f1f5f9;
+}
+
+img,
+svg,
+canvas {
+  max-width: 100%;
+}
+
+input,
+select,
+textarea {
+  min-width: 0;
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+::selection {
+  background: #99f6e4;
+  color: #134e4a;
+}
+
+@media (max-width: 639px) {
+  .btn {
+    min-height: 2.5rem;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .table-card-actions .btn,
+  .table-card-actions a {
+    min-height: 2.5rem;
+  }
+}
+
+.focus-ring {
+  @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+}
+
+.app-surface {
+  @apply rounded-2xl border border-white/80 bg-white/90 shadow-[0_12px_35px_-18px_rgba(15,23,42,0.28)] backdrop-blur;
+}
+
+.field-label {
+  @apply text-xs font-medium uppercase tracking-wide text-slate-500;
+}
+
+.page-title {
+  @apply text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl;
+}
+
+.page-kicker {
+  @apply mb-1 text-xs font-bold uppercase tracking-[0.18em] text-primary;
+}
+
+.content-card {
+  @apply rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_10px_28px_-20px_rgba(15,23,42,0.36)] sm:p-5;
+}
+
+.app-input {
+  @apply input input-bordered w-full rounded-xl border-slate-200 bg-slate-50/80 transition focus:border-primary focus:bg-white focus:outline-none;
+}
+
+.app-select {
+  @apply select select-bordered w-full rounded-xl border-slate-200 bg-slate-50/80 transition focus:border-primary focus:bg-white focus:outline-none;
+}
+
+.app-textarea {
+  @apply textarea textarea-bordered w-full rounded-xl border-slate-200 bg-slate-50/80 transition focus:border-primary focus:bg-white focus:outline-none;
+}
+
+.responsive-panel-grid {
+  @apply grid gap-6 xl:grid-cols-[minmax(0,1fr)_22.5rem];
+}
+
+.responsive-map-grid {
+  @apply grid gap-6 xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)_minmax(0,320px)];
+}
+
+.chart-frame {
+  @apply min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 sm:p-5;
+}
+
+#qr-reader {
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 0.75rem;
+}
+
+#qr-reader video,
+#qr-reader img {
+  width: 100% !important;
+  height: auto !important;
+}
+
+.auth-background {
+  background:
+    radial-gradient(circle at 15% 20%, rgba(45, 212, 191, 0.3), transparent 28rem),
+    radial-gradient(circle at 80% 85%, rgba(96, 165, 250, 0.2), transparent 30rem),
+    #0f172a;
+}
+
+.table thead th {
+  @apply bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500;
+}
+
+.table tbody tr {
+  @apply border-slate-100 transition-colors hover:bg-primary/[0.035];
+}
+
+@media print {
+  .drawer-side,
+  header,
+  .btn {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+}

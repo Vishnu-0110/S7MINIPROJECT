@@ -1,0 +1,140 @@
+import { Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import DataTable from "../components/DataTable.jsx";
+import LoadingState from "../components/LoadingState.jsx";
+import { useApiResource } from "../hooks/useApiResource.js";
+import { api } from "../lib/api.js";
+import PasswordField from "../components/PasswordField.jsx";
+
+const config = {
+  vehicles: {
+    title: "Vehicle Management",
+    defaults: { fuelType: "Diesel", fuelLevel: 75, mileageKmPerLiter: 4, currentKM: 0 },
+    columns: [
+      { key: "vehicleId", label: "Vehicle" },
+      { key: "registrationNumber", label: "Registration" },
+      { key: "type", label: "Type" },
+      { key: "capacity", label: "Capacity" },
+      { key: "status", label: "Status" }
+    ],
+    fields: ["vehicleId", "registrationNumber", "name", "type", "capacity", "fuelType", "fuelLevel", "mileageKmPerLiter", "currentKM"]
+  },
+  drivers: {
+    title: "Driver Management",
+    defaults: { assignedVehicleTypes: [] },
+    columns: [
+      { key: "driverId", label: "Driver" },
+      { key: "licenseNumber", label: "License" },
+      { key: "status", label: "Status" },
+      { key: "rating", label: "Rating" }
+    ],
+    fields: ["userId", "driverId", "licenseNumber", "phone"],
+    selects: { userId: "drivers" }
+  },
+  users: {
+    title: "User Management",
+    defaults: { role: "FACULTY_STAFF", password: "SmartFleet@123" },
+    columns: [
+      { key: "name", label: "Name" },
+      { key: "email", label: "Email" },
+      { key: "role", label: "Role" },
+      { key: "isActive", label: "Active", render: (row) => (row.isActive ? "Yes" : "No") }
+    ],
+    fields: ["name", "email", "password", "role", "departmentId", "phone"],
+    selects: { role: "roles", departmentId: "departments" }
+  },
+  departments: {
+    title: "Department Management",
+    defaults: { isActive: true },
+    columns: [
+      { key: "code", label: "Code" },
+      { key: "name", label: "Name" },
+      { key: "isActive", label: "Active", render: (row) => (row.isActive ? "Yes" : "No") }
+    ],
+    fields: ["code", "name", "coordinatorId"],
+    selects: { coordinatorId: "coordinators" }
+  },
+  "vehicle-documents": {
+    title: "Vehicle Documents",
+    defaults: { status: "VALID" },
+    columns: [
+      { key: "documentId", label: "Document" },
+      { key: "vehicleId", label: "Vehicle" },
+      { key: "type", label: "Type" },
+      { key: "expiresAt", label: "Expires" },
+      { key: "status", label: "Status" }
+    ],
+    fields: ["documentId", "vehicleId", "type", "number", "expiresAt", "status"],
+    selects: { vehicleId: "vehicles", status: "documentStatus" }
+  }
+};
+
+export default function ManagementPage({ resource }) {
+  const cfg = config[resource];
+  const { data, loading, error, reload } = useApiResource(`/${resource}`);
+  const [form, setForm] = useState(cfg.defaults || {});
+  const [message, setMessage] = useState("");
+  const [optionsError, setOptionsError] = useState("");
+  const [options, setOptions] = useState({ vehicles: [], users: [], departments: [] });
+
+  useEffect(() => {
+    Promise.all([api.get("/vehicles"), api.get("/users"), api.get("/departments")])
+      .then(([vehicles, users, departments]) => setOptions({ vehicles: vehicles.data || [], users: users.data || [], departments: departments.data || [] }))
+      .catch((err) => setOptionsError(err.message || "Could not load form options."));
+  }, []);
+
+  async function submit(event) {
+    event.preventDefault();
+    try {
+      await api.post(`/${resource}`, form);
+      setForm(cfg.defaults || {});
+      setMessage("Saved");
+      await reload();
+    } catch (err) {
+      setMessage(err.message);
+    }
+  }
+
+  if (loading) return <LoadingState />;
+
+  return (
+    <section className="responsive-panel-grid">
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">{cfg.title}</h2>
+        {error ? <div className="alert alert-error">{error}</div> : null}
+        {optionsError ? <div className="alert alert-warning">Some selection lists could not be loaded: {optionsError}</div> : null}
+        <DataTable rows={data} columns={cfg.columns} />
+      </div>
+      <aside className="rounded-lg border border-slate-200 bg-white p-5">
+        <h3 className="font-semibold">Add {resource.slice(0, -1)}</h3>
+        <form className="mt-4 space-y-3" onSubmit={submit}>
+          {cfg.fields.map((field) => <ManagementField key={field} field={field} kind={cfg.selects?.[field]} form={form} setForm={setForm} options={options} />)}
+          {message ? <p className="text-sm text-slate-500">{message}</p> : null}
+          <button className="btn btn-primary w-full">
+            <Plus className="h-4 w-4" />
+            Save
+          </button>
+        </form>
+      </aside>
+    </section>
+  );
+}
+
+function ManagementField({ field, kind, form, setForm, options }) {
+  const value = form[field] || "";
+  const update = (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
+  const choices = {
+    vehicles: options.vehicles.map((item) => ({ value: item._id, label: `${item.vehicleId} — ${item.registrationNumber}` })),
+    departments: options.departments.map((item) => ({ value: item._id, label: `${item.code} — ${item.name}` })),
+    drivers: options.users.filter((item) => item.role === "DRIVER").map((item) => ({ value: item._id, label: `${item.name} (${item.email})` })),
+    coordinators: options.users.filter((item) => item.role === "DEPARTMENT_COORDINATOR").map((item) => ({ value: item._id, label: `${item.name} (${item.email})` })),
+    roles: ["FACULTY_STAFF", "DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"].map((item) => ({ value: item, label: item.replaceAll("_", " ") })),
+    documentStatus: ["VALID", "EXPIRING", "EXPIRED"].map((item) => ({ value: item, label: item }))
+  };
+  if (kind) {
+    return <select className="select select-bordered w-full" value={value} onChange={update}><option value="">Select {field}</option>{choices[kind].map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>;
+  }
+  const type = ["capacity", "fuelLevel", "mileageKmPerLiter", "currentKM"].includes(field) ? "number" : field === "expiresAt" ? "date" : "text";
+  if (field === "password") return <PasswordField className="input input-bordered w-full" placeholder={field} value={value} onChange={update} />;
+  return <input className="input input-bordered w-full" type={type} min={type === "number" ? "0" : undefined} placeholder={field} value={value} onChange={update} />;
+}

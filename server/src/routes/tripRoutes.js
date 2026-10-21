@@ -1,0 +1,27 @@
+import { Router } from "express";
+import {
+  activeTripSummary,
+  endTripAction,
+  getTrip,
+  gpsAction,
+  listTrips,
+  startTripAction,
+  tripQr,
+  verifyTripQr
+} from "../controllers/tripController.js";
+import { requireAuth, requireRoles } from "../middleware/auth.js";
+import { validate } from "../middleware/validate.js";
+import { endTripSchema, gpsSchema, qrVerifySchema, startTripSchema } from "../validators/tripValidators.js";
+import { asyncHandler } from "../utils/apiResponse.js";
+
+export const tripRoutes = Router();
+tripRoutes.use(requireAuth);
+
+tripRoutes.get("/", asyncHandler(listTrips));
+tripRoutes.get("/summary", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(activeTripSummary));
+tripRoutes.get("/:id", asyncHandler(getTrip));
+tripRoutes.get("/:id/qr", asyncHandler(tripQr));
+tripRoutes.post("/:id/qr/verify", requireRoles("DRIVER"), validate(qrVerifySchema), asyncHandler(verifyTripQr));
+tripRoutes.post("/:id/start", requireRoles("DRIVER"), validate(startTripSchema), asyncHandler(startTripAction));
+tripRoutes.post("/:id/end", requireRoles("DRIVER"), validate(endTripSchema), asyncHandler(endTripAction));
+tripRoutes.post("/:id/gps", requireRoles("DRIVER"), validate(gpsSchema), asyncHandler(gpsAction));
