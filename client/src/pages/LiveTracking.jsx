@@ -37,7 +37,7 @@ export default function LiveTracking() {
     <section className="responsive-map-grid">
       <aside>
         {error ? <div className="alert alert-error mb-3">{error}</div> : null}
-        <h2 className="mb-3 text-base font-semibold">Active vehicles</h2>
+        <h2 className="mb-3 text-base font-semibold">Active trips</h2>
         <DataTable
           rows={trips}
           columns={[
@@ -51,17 +51,17 @@ export default function LiveTracking() {
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,118,110,.12)_1px,transparent_1px),linear-gradient(rgba(37,99,235,.1)_1px,transparent_1px)] bg-[size:42px_42px]" />
           <div className="relative text-center">
             <MapPin className="mx-auto h-12 w-12 text-error" />
-            <p className="mt-2 font-semibold">{latest ? `${latest.latitude?.toFixed?.(4)}, ${latest.longitude?.toFixed?.(4)}` : "Waiting for GPS"}</p>
-            <p className="text-sm text-slate-500">Real Socket.IO updates and saved GPS logs</p>
+            <p className="mt-2 font-semibold">{latest ? `${latest.latitude?.toFixed?.(4)}, ${latest.longitude?.toFixed?.(4)}` : "Waiting for a location update"}</p>
+            <p className="text-sm text-slate-500">Latest GPS location reported by a driver</p>
           </div>
         </div>
       </div>
       <aside className="rounded-lg border border-slate-200 bg-white p-5">
         <RadioTower className="mb-3 h-5 w-5 text-primary" />
-        <h2 className="font-semibold">Selected vehicle</h2>
+        <h2 className="font-semibold">Latest location</h2>
         {latest ? (
           <div className="mt-4 space-y-2 text-sm">
-            <p>Status: Moving</p>
+            <p>Status: Reported</p>
             <p>Speed: {latest.speed || 0} km/h</p>
             <p>Accuracy: {latest.accuracy || "-"} m</p>
             <p>GPS: Active</p>

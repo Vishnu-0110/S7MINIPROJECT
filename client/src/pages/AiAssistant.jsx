@@ -39,7 +39,7 @@ export default function AiAssistant() {
       <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
         <div className="flex items-center gap-2">
           <Bot className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">AI Assistant</h2>
+          <div><h2 className="text-lg font-semibold">Help Assistant</h2><p className="text-sm text-slate-500">Ask a simple question about your requests, trips, or vehicles.</p></div>
         </div>
         {error ? <div className="alert alert-error mt-4">{error}</div> : null}
         <div className="mt-5 min-h-[420px] space-y-3">
@@ -53,7 +53,7 @@ export default function AiAssistant() {
           ))}
         </div>
         <div className="mt-4 flex min-w-0 gap-2">
-          <input className="input input-bordered min-w-0 flex-1" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => event.key === "Enter" && ask()} aria-label="Ask the AI assistant" />
+          <input className="input input-bordered min-w-0 flex-1" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => event.key === "Enter" && ask()} aria-label="Ask for help" placeholder="Ask a question" />
           <button className="btn btn-primary" onClick={() => ask()} disabled={loading}>
             <Send className="h-4 w-4" />
             Send
@@ -61,7 +61,7 @@ export default function AiAssistant() {
         </div>
       </div>
       <aside className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
-        <h3 className="font-semibold">Suggested prompts</h3>
+        <h3 className="font-semibold">Try one of these</h3>
         <div className="mt-4 space-y-2">
           {suggestions.map((item) => (
             <button key={item} className="btn btn-outline btn-sm h-auto min-h-10 w-full justify-start whitespace-normal py-2 text-left" onClick={() => ask(item)}>

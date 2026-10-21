@@ -69,11 +69,11 @@ export default function Dashboard() {
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-200">BIT transport operations</p>
             <h2 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">Good to see you, {user.name?.split(" ")[0] || "there"}.</h2>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">Monitor requests, trips, and live transport activity from one connected workspace.</p>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">Check requests, trips, and important notices in one place.</p>
           </div>
           <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-            <p className="text-xs font-medium text-slate-300">System status</p>
-            <p className="mt-1 flex items-center gap-2 text-sm font-bold"><span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]" /> Operational</p>
+            <p className="text-xs font-medium text-slate-300">Service status</p>
+            <p className="mt-1 flex items-center gap-2 text-sm font-bold"><span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399]" /> Available</p>
           </div>
         </div>
       </section>
