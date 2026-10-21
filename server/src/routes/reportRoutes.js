@@ -5,4 +5,4 @@ import { asyncHandler } from "../utils/apiResponse.js";
 
 export const reportRoutes = Router();
 
-reportRoutes.get("/trips.csv", requireAuth, requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(tripsCsv));
+reportRoutes.get("/trips.csv", requireAuth, requireRoles("TRANSPORT_ADMIN"), asyncHandler(tripsCsv));

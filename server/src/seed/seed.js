@@ -24,7 +24,6 @@ const password = "SmartFleet@123";
 async function resetDevelopmentData() {
   if (!env.seedReset) return;
   await Promise.all([
-    User.deleteMany({}),
     Department.deleteMany({}),
     Vehicle.deleteMany({}),
     Driver.deleteMany({}),
@@ -62,7 +61,6 @@ async function seed() {
     { upsert: true, new: true }
   );
 
-  const superAdmin = await upsertUser({ name: "BIT Super Admin", email: "superadmin@bit.edu.in", role: "SUPER_ADMIN", departmentId: transport._id });
   const transportAdmin = await upsertUser({ name: "Transport Admin", email: "transportadmin@bit.edu.in", role: "TRANSPORT_ADMIN", departmentId: transport._id });
   const coordinator = await upsertUser({ name: "CSE Coordinator", email: "coordinator@bit.edu.in", role: "DEPARTMENT_COORDINATOR", departmentId: cse._id });
   const faculty = await upsertUser({ name: "Faculty User", email: "faculty@bit.edu.in", role: "FACULTY_STAFF", departmentId: cse._id });

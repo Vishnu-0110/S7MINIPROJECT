@@ -2,6 +2,7 @@ import { Driver, Trip, VehicleRequest } from "../models/index.js";
 import { ApiError, ok } from "../utils/apiResponse.js";
 import { parsePagination, paginationPayload } from "../utils/pagination.js";
 import { createTripFromAssignment, endTrip, generateTripQr, saveGps, startTrip, verifyQr } from "../services/tripService.js";
+import { indiaDayRange, isTodayInIndia } from "../utils/indiaTime.js";
 
 export async function assignTrip(req, res) {
   const trip = await createTripFromAssignment({
@@ -23,7 +24,13 @@ export async function listTrips(req, res) {
   if (req.user.role === "DEPARTMENT_COORDINATOR") query.departmentId = req.user.departmentId;
   if (req.user.role === "DRIVER") {
     const driver = await Driver.findOne({ userId: req.user._id });
-    query.driverId = driver?._id;
+    if (!driver) return ok(res, "Trips", [], 200, { pagination: paginationPayload(page, limit, 0) });
+    const { start, end } = indiaDayRange();
+    query.driverId = driver._id;
+    query.$or = [
+      { scheduledStartTime: { $gte: start, $lt: end } },
+      { status: { $in: ["TRIP_STARTED", "TRIP_RESUMED"] } }
+    ];
   }
   if (req.query.status) query.status = req.query.status;
   const [data, total] = await Promise.all([
@@ -42,7 +49,7 @@ export async function listTrips(req, res) {
 
 async function assertTripAccess(trip, user) {
   if (!trip) throw new ApiError("Trip not found", 404);
-  if (["TRANSPORT_ADMIN", "SUPER_ADMIN"].includes(user.role)) return;
+  if (user.role === "TRANSPORT_ADMIN") return;
   if (user.role === "FACULTY_STAFF" && String(trip.facultyId?._id || trip.facultyId) === String(user._id)) return;
   if (
     user.role === "DEPARTMENT_COORDINATOR" &&
@@ -52,7 +59,10 @@ async function assertTripAccess(trip, user) {
   }
   if (user.role === "DRIVER") {
     const driver = await Driver.findOne({ userId: user._id });
-    if (driver && String(trip.driverId?._id || trip.driverId) === String(driver._id)) return;
+    if (driver && String(trip.driverId?._id || trip.driverId) === String(driver._id)) {
+      if (isTodayInIndia(trip.scheduledStartTime) || ["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status)) return;
+      throw new ApiError("Driver trip details are available on the scheduled trip date.", 403);
+    }
   }
   throw new ApiError("Forbidden", 403);
 }
@@ -68,10 +78,13 @@ export async function getTrip(req, res) {
 }
 
 export async function tripQr(req, res) {
-  const trip = await Trip.findById(req.params.id).select("facultyId departmentId driverId");
+  const trip = await Trip.findById(req.params.id).select("facultyId departmentId driverId scheduledStartTime status");
   await assertTripAccess(trip, req.user);
   if (req.user.role === "DRIVER") {
     throw new ApiError("The faculty member must display the trip QR code for the driver to scan.", 403);
+  }
+  if (!isTodayInIndia(trip.scheduledStartTime)) {
+    throw new ApiError("The trip QR code is available on the scheduled trip date.", 403);
   }
   const payload = { qr: await generateTripQr(req.params.id) };
   return ok(res, "QR generated", payload);

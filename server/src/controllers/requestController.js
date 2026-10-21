@@ -33,8 +33,8 @@ export async function listRequests(req, res) {
   for (const field of ["status", "departmentId", "priority", "tripType"]) {
     if (req.query[field]) query[field] = req.query[field];
   }
-  if (req.query.actionable === "true" && ["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"].includes(req.user.role)) {
-    const approvalRole = req.user.role === "SUPER_ADMIN" ? "TRANSPORT_ADMIN" : req.user.role;
+  if (req.query.actionable === "true" && ["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"].includes(req.user.role)) {
+    const approvalRole = req.user.role;
     const approvalRequestIds = await Approval.distinct("requestId", { status: "PENDING", approverRole: approvalRole });
     query._id = { $in: approvalRequestIds };
   }
@@ -52,7 +52,7 @@ export async function getRequest(req, res) {
   if (!request) throw new ApiError("Request not found", 404);
   const sameUser = String(request.facultyId?._id || request.facultyId) === String(req.user._id);
   const sameDepartment = String(request.departmentId?._id || request.departmentId) === String(req.user.departmentId);
-  const privileged = ["TRANSPORT_ADMIN", "SUPER_ADMIN"].includes(req.user.role);
+  const privileged = req.user.role === "TRANSPORT_ADMIN";
   if (!sameUser && !(req.user.role === "DEPARTMENT_COORDINATOR" && sameDepartment) && !privileged) {
     throw new ApiError("Forbidden", 403);
   }
@@ -75,7 +75,7 @@ export async function rejectRequest(req, res) {
 export async function cancelRequest(req, res) {
   const request = await VehicleRequest.findById(req.params.id);
   if (!request) throw new ApiError("Request not found", 404);
-  if (String(request.facultyId) !== String(req.user._id) && !["TRANSPORT_ADMIN", "SUPER_ADMIN"].includes(req.user.role)) throw new ApiError("Forbidden", 403);
+  if (String(request.facultyId) !== String(req.user._id) && req.user.role !== "TRANSPORT_ADMIN") throw new ApiError("Forbidden", 403);
   if (!["PENDING_APPROVAL", "APPROVED", "APPROVED_AWAITING_VEHICLE"].includes(request.status)) throw new ApiError("This request cannot be cancelled", 400);
   request.status = "CANCELLED";
   request.history.push({ status: "CANCELLED", actorId: req.user._id, note: "Cancelled" });

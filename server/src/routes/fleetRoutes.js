@@ -22,22 +22,22 @@ const users = createCrudController(User, ["name", "email", "role"]);
 const docs = createCrudController(VehicleDocument, ["documentId", "type", "number"]);
 
 fleetRoutes.get("/vehicles", asyncHandler(vehicles.list));
-fleetRoutes.post("/vehicles", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), validate(vehicleSchema), asyncHandler(vehicles.create));
+fleetRoutes.post("/vehicles", requireRoles("TRANSPORT_ADMIN"), validate(vehicleSchema), asyncHandler(vehicles.create));
 fleetRoutes.get("/vehicles/:id", asyncHandler(vehicles.get));
-fleetRoutes.patch("/vehicles/:id", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(vehicles.update));
+fleetRoutes.patch("/vehicles/:id", requireRoles("TRANSPORT_ADMIN"), asyncHandler(vehicles.update));
 
 fleetRoutes.get("/drivers", asyncHandler(drivers.list));
-fleetRoutes.post("/drivers", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), validate(driverSchema), asyncHandler(drivers.create));
+fleetRoutes.post("/drivers", requireRoles("TRANSPORT_ADMIN"), validate(driverSchema), asyncHandler(drivers.create));
 fleetRoutes.get("/drivers/:id", asyncHandler(drivers.get));
-fleetRoutes.patch("/drivers/:id", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(drivers.update));
+fleetRoutes.patch("/drivers/:id", requireRoles("TRANSPORT_ADMIN"), asyncHandler(drivers.update));
 
 fleetRoutes.get("/departments", asyncHandler(departments.list));
-fleetRoutes.post("/departments", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(departments.create));
-fleetRoutes.patch("/departments/:id", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(departments.update));
+fleetRoutes.post("/departments", requireRoles("TRANSPORT_ADMIN"), asyncHandler(departments.create));
+fleetRoutes.patch("/departments/:id", requireRoles("TRANSPORT_ADMIN"), asyncHandler(departments.update));
 
-fleetRoutes.get("/users", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(users.list));
-fleetRoutes.post("/users", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(users.create));
-fleetRoutes.patch("/users/:id", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(users.update));
+fleetRoutes.get("/users", requireRoles("TRANSPORT_ADMIN"), asyncHandler(users.list));
+fleetRoutes.post("/users", requireRoles("TRANSPORT_ADMIN"), asyncHandler(users.create));
+fleetRoutes.patch("/users/:id", requireRoles("TRANSPORT_ADMIN"), asyncHandler(users.update));
 
 fleetRoutes.get("/vehicle-documents", asyncHandler(docs.list));
-fleetRoutes.post("/vehicle-documents", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(docs.create));
+fleetRoutes.post("/vehicle-documents", requireRoles("TRANSPORT_ADMIN"), asyncHandler(docs.create));

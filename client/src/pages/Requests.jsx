@@ -10,8 +10,8 @@ import { api } from "../lib/api.js";
 export default function Requests() {
   const { data, loading, error, reload } = useApiResource("/requests");
   const user = useAuthStore((state) => state.user);
-  const canCreate = ["FACULTY_STAFF", "SUPER_ADMIN"].includes(user?.role);
-  const canAllocate = ["TRANSPORT_ADMIN", "SUPER_ADMIN"].includes(user?.role);
+  const canCreate = user?.role === "FACULTY_STAFF";
+  const canAllocate = user?.role === "TRANSPORT_ADMIN";
   const [message, setMessage] = useState("");
   const [approvalDetails, setApprovalDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);

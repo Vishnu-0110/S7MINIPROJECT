@@ -18,7 +18,7 @@ export const tripRoutes = Router();
 tripRoutes.use(requireAuth);
 
 tripRoutes.get("/", asyncHandler(listTrips));
-tripRoutes.get("/summary", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(activeTripSummary));
+tripRoutes.get("/summary", requireRoles("TRANSPORT_ADMIN"), asyncHandler(activeTripSummary));
 tripRoutes.get("/:id", asyncHandler(getTrip));
 tripRoutes.get("/:id/qr", asyncHandler(tripQr));
 tripRoutes.post("/:id/qr/verify", requireRoles("DRIVER"), validate(qrVerifySchema), asyncHandler(verifyTripQr));

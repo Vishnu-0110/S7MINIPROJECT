@@ -131,7 +131,7 @@ function ManagementField({ field, kind, form, setForm, options }) {
     departments: options.departments.map((item) => ({ value: item._id, label: `${item.code} — ${item.name}` })),
     drivers: options.users.filter((item) => item.role === "DRIVER").map((item) => ({ value: item._id, label: `${item.name} (${item.email})` })),
     coordinators: options.users.filter((item) => item.role === "DEPARTMENT_COORDINATOR").map((item) => ({ value: item._id, label: `${item.name} (${item.email})` })),
-    roles: ["FACULTY_STAFF", "DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"].map((item) => ({ value: item, label: item.replaceAll("_", " ") })),
+    roles: ["FACULTY_STAFF", "DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"].map((item) => ({ value: item, label: item.replaceAll("_", " ") })),
     documentStatus: ["VALID", "EXPIRING", "EXPIRED"].map((item) => ({ value: item, label: item }))
   };
   if (kind) {

@@ -24,7 +24,7 @@ export default function Dashboard() {
         const [reqs, notes, tripSummary] = await Promise.all([
           api.get("/requests?limit=5"),
           api.get("/notifications?limit=5"),
-          ["TRANSPORT_ADMIN", "SUPER_ADMIN"].includes(user.role) ? api.get("/trips/summary") : Promise.resolve({ data: {} })
+          user.role === "TRANSPORT_ADMIN" ? api.get("/trips/summary") : Promise.resolve({ data: {} })
         ]);
         setRequests(reqs.data || []);
         setNotifications(notes.data || []);

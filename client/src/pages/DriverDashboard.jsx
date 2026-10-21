@@ -1,14 +1,13 @@
 import { AlertTriangle, Fuel, Navigation, QrCode } from "lucide-react";
 import { Link } from "react-router-dom";
-import DataTable from "../components/DataTable.jsx";
 import LoadingState from "../components/LoadingState.jsx";
 import { useApiResource } from "../hooks/useApiResource.js";
 import { api } from "../lib/api.js";
 
 export default function DriverDashboard() {
   const { data, loading, error, reload } = useApiResource("/trips");
-  const activeTrip = data.find((trip) => trip.status === "TRIP_STARTED");
-  const scheduledTrip = data.find((trip) => trip.status === "SCHEDULED");
+  const activeTrip = data.find((trip) => ["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status));
+  const assignedTrip = activeTrip || data[0];
 
   if (loading) return <LoadingState />;
 
@@ -23,33 +22,14 @@ export default function DriverDashboard() {
         <Link className="btn btn-outline btn-sm" to="/fuel"><Fuel className="h-4 w-4" /> Fuel log</Link>
       </div>
       {error ? <div className="alert alert-error">{error}</div> : null}
-      {activeTrip ? <TripActionCard trip={activeTrip} reload={reload} /> : null}
-      {!activeTrip && scheduledTrip ? <TripActionCard trip={scheduledTrip} reload={reload} /> : null}
-      {!activeTrip && !scheduledTrip ? <div className="app-surface p-5 text-sm text-slate-600">There are no scheduled or active trips assigned to you.</div> : null}
-      <div>
-      <h3 className="mb-3 font-semibold">Trip history</h3>
-      <DataTable
-        rows={data}
-        columns={[
-          { key: "tripId", label: "Trip" },
-          { key: "vehicle", label: "Vehicle", render: (row) => row.vehicleId?.vehicleId || "-" },
-          { key: "pickup", label: "Pickup", render: (row) => row.source || "-" },
-          { key: "destination", label: "Destination" },
-          { key: "status", label: "Status" },
-          {
-            key: "actions",
-            label: "Actions",
-            render: (row) => <Link className="btn btn-ghost btn-xs" to={`/trips/${row._id}`}>Open</Link>
-          }
-        ]}
-      />
-      </div>
+      {assignedTrip ? <TripActionCard trip={assignedTrip} reload={reload} /> : null}
+      {!assignedTrip ? <div className="app-surface p-5 text-sm text-slate-600">There is no trip assigned to you today.</div> : null}
     </section>
   );
 }
 
 function TripActionCard({ trip, reload }) {
-  const isActive = trip.status === "TRIP_STARTED";
+  const isActive = ["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status);
 
   async function reportEmergency() {
     if (!window.confirm("Send an emergency alert to transport operations?")) return;

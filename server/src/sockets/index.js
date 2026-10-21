@@ -25,7 +25,7 @@ export function configureSockets(io) {
   io.on("connection", async (socket) => {
     if (socket.user) {
       socket.join(`user-room-${socket.user._id}`);
-      if (["TRANSPORT_ADMIN", "SUPER_ADMIN"].includes(socket.user.role)) socket.join("admin-room");
+      if (socket.user.role === "TRANSPORT_ADMIN") socket.join("admin-room");
       if (socket.user.role === "DEPARTMENT_COORDINATOR" && socket.user.departmentId) socket.join(`coordinator-room-${socket.user.departmentId}`);
       if (socket.user.role === "DRIVER") {
         const driver = await Driver.findOne({ userId: socket.user._id });
@@ -37,7 +37,7 @@ export function configureSockets(io) {
       const trip = await Trip.findById(tripId).select("facultyId departmentId driverId");
       if (!trip) return;
       const driver = socket.user.role === "DRIVER" ? await Driver.findOne({ userId: socket.user._id }).select("_id") : null;
-      const allowed = ["TRANSPORT_ADMIN", "SUPER_ADMIN"].includes(socket.user.role)
+      const allowed = socket.user.role === "TRANSPORT_ADMIN"
         || (socket.user.role === "FACULTY_STAFF" && String(trip.facultyId) === String(socket.user._id))
         || (socket.user.role === "DEPARTMENT_COORDINATOR" && String(trip.departmentId) === String(socket.user.departmentId))
         || (driver && String(trip.driverId) === String(driver._id));

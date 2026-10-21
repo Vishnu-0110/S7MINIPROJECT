@@ -49,7 +49,7 @@ async function incidentRecipients(trip) {
   return User.find({
     isActive: true,
     $or: [
-      { role: { $in: ["TRANSPORT_ADMIN", "SUPER_ADMIN"] } },
+      { role: "TRANSPORT_ADMIN" },
       { role: "DEPARTMENT_COORDINATOR", departmentId: trip.departmentId }
     ]
   }).select("_id");
@@ -61,7 +61,7 @@ async function notifyIncident(trip, alert, title, message) {
 }
 
 async function assertIncidentManager(alert, user) {
-  if (["TRANSPORT_ADMIN", "SUPER_ADMIN"].includes(user.role)) return;
+  if (user.role === "TRANSPORT_ADMIN") return;
   const trip = await Trip.findById(alert.tripId).select("departmentId");
   if (user.role === "DEPARTMENT_COORDINATOR" && trip && String(trip.departmentId) === String(user.departmentId)) return;
   const error = new Error("You are not authorized to manage this incident.");
@@ -137,7 +137,7 @@ export async function raiseEmergency(req, res) {
   const driver = req.user.role === "DRIVER" ? await Driver.findOne({ userId: req.user._id }) : null;
   const trip = await Trip.findById(req.body.tripId);
   if (!trip) { const error = new Error("Trip not found."); error.status = 404; throw error; }
-  const allowed = ["TRANSPORT_ADMIN", "SUPER_ADMIN"].includes(req.user.role)
+  const allowed = req.user.role === "TRANSPORT_ADMIN"
     || (driver && String(trip.driverId) === String(driver._id))
     || (req.user.role === "FACULTY_STAFF" && String(trip.facultyId) === String(req.user._id));
   if (!allowed) { const error = new Error("You are not authorized to raise an emergency for this trip."); error.status = 403; throw error; }

@@ -32,24 +32,24 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="driver" element={<Shell roles={["DRIVER"]}><DriverDashboard /></Shell>} />
         <Route path="requests" element={<Requests />} />
-        <Route path="requests/:id/allocation" element={<Shell roles={["TRANSPORT_ADMIN", "SUPER_ADMIN"]}><SmartAllocation /></Shell>} />
-        <Route path="request/new" element={<Shell roles={["FACULTY_STAFF", "SUPER_ADMIN"]}><RequestForm /></Shell>} />
-        <Route path="approvals" element={<Shell roles={["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"]}><ApprovalCenter /></Shell>} />
+        <Route path="requests/:id/allocation" element={<Shell roles={["TRANSPORT_ADMIN"]}><SmartAllocation /></Shell>} />
+        <Route path="request/new" element={<Shell roles={["FACULTY_STAFF"]}><RequestForm /></Shell>} />
+        <Route path="approvals" element={<Shell roles={["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"]}><ApprovalCenter /></Shell>} />
         <Route path="trips" element={<Trips />} />
         <Route path="trips/:id" element={<TripDetails />} />
-        <Route path="tracking" element={<Shell roles={["FACULTY_STAFF", "TRANSPORT_ADMIN", "SUPER_ADMIN"]}><LiveTracking /></Shell>} />
-        <Route path="vehicles" element={<Shell roles={["TRANSPORT_ADMIN", "SUPER_ADMIN"]}><ManagementPage resource="vehicles" /></Shell>} />
-        <Route path="drivers" element={<Shell roles={["TRANSPORT_ADMIN", "SUPER_ADMIN"]}><ManagementPage resource="drivers" /></Shell>} />
-        <Route path="vehicle-documents" element={<Shell roles={["TRANSPORT_ADMIN", "SUPER_ADMIN"]}><ManagementPage resource="vehicle-documents" /></Shell>} />
-        <Route path="users" element={<Shell roles={["TRANSPORT_ADMIN", "SUPER_ADMIN"]}><ManagementPage resource="users" /></Shell>} />
-        <Route path="departments" element={<Shell roles={["TRANSPORT_ADMIN", "SUPER_ADMIN"]}><ManagementPage resource="departments" /></Shell>} />
-        <Route path="maintenance" element={<Shell roles={["TRANSPORT_ADMIN", "SUPER_ADMIN"]}><OperationsPage resource="maintenance" /></Shell>} />
-        <Route path="fuel" element={<Shell roles={["DRIVER", "TRANSPORT_ADMIN", "SUPER_ADMIN"]}><OperationsPage resource="fuel" /></Shell>} />
-        <Route path="expenses" element={<Shell roles={["TRANSPORT_ADMIN", "SUPER_ADMIN"]}><OperationsPage resource="expenses" /></Shell>} />
-        <Route path="emergencies" element={<Shell roles={["DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"]}><OperationsPage resource="emergencies" /></Shell>} />
+        <Route path="tracking" element={<Shell roles={["FACULTY_STAFF", "TRANSPORT_ADMIN"]}><LiveTracking /></Shell>} />
+        <Route path="vehicles" element={<Shell roles={["TRANSPORT_ADMIN"]}><ManagementPage resource="vehicles" /></Shell>} />
+        <Route path="drivers" element={<Shell roles={["TRANSPORT_ADMIN"]}><ManagementPage resource="drivers" /></Shell>} />
+        <Route path="vehicle-documents" element={<Shell roles={["TRANSPORT_ADMIN"]}><ManagementPage resource="vehicle-documents" /></Shell>} />
+        <Route path="users" element={<Shell roles={["TRANSPORT_ADMIN"]}><ManagementPage resource="users" /></Shell>} />
+        <Route path="departments" element={<Shell roles={["TRANSPORT_ADMIN"]}><ManagementPage resource="departments" /></Shell>} />
+        <Route path="maintenance" element={<Shell roles={["TRANSPORT_ADMIN"]}><OperationsPage resource="maintenance" /></Shell>} />
+        <Route path="fuel" element={<Shell roles={["DRIVER", "TRANSPORT_ADMIN"]}><OperationsPage resource="fuel" /></Shell>} />
+        <Route path="expenses" element={<Shell roles={["TRANSPORT_ADMIN"]}><OperationsPage resource="expenses" /></Shell>} />
+        <Route path="emergencies" element={<Shell roles={["DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"]}><OperationsPage resource="emergencies" /></Shell>} />
         <Route path="notifications" element={<Notifications />} />
-        <Route path="analytics" element={<Shell roles={["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"]}><Analytics /></Shell>} />
-        <Route path="reports" element={<Shell roles={["TRANSPORT_ADMIN", "SUPER_ADMIN"]}><Reports /></Shell>} />
+        <Route path="analytics" element={<Shell roles={["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"]}><Analytics /></Shell>} />
+        <Route path="reports" element={<Shell roles={["TRANSPORT_ADMIN"]}><Reports /></Shell>} />
         <Route path="ai" element={<AiAssistant />} />
       </Route>
     </Routes>

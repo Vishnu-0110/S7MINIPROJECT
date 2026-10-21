@@ -64,7 +64,7 @@ export async function decideApproval({ requestId, actor, status, comments }) {
       throw error;
     }
 
-    const approverRole = actor.role === "SUPER_ADMIN" ? "TRANSPORT_ADMIN" : actor.role;
+    const approverRole = actor.role;
     const versionFilter = request.approvalVersion === 1
       ? { $or: [{ version: 1 }, { version: { $exists: false } }] }
       : { version: request.approvalVersion };

@@ -5,4 +5,4 @@ import { asyncHandler } from "../utils/apiResponse.js";
 
 export const analyticsRoutes = Router();
 
-analyticsRoutes.get("/", requireAuth, requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN", "DEPARTMENT_COORDINATOR"), asyncHandler(analytics));
+analyticsRoutes.get("/", requireAuth, requireRoles("TRANSPORT_ADMIN", "DEPARTMENT_COORDINATOR"), asyncHandler(analytics));

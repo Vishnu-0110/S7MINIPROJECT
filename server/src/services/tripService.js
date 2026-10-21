@@ -15,6 +15,8 @@ import { audit } from "./auditService.js";
 import { assertNoDoubleBooking } from "./bookingService.js";
 import { notify } from "./notificationService.js";
 import { vehicleSupportsRequest } from "./allocationService.js";
+import { sendTripDayReminder } from "./tripReminderService.js";
+import { isTodayInIndia } from "../utils/indiaTime.js";
 
 let ioRef = null;
 
@@ -144,6 +146,7 @@ export async function createTripFromAssignment({ requestId, vehicleId, driverId,
     await session.commitTransaction();
 
     await notify(request.facultyId, "Trip scheduled", `Trip ${tripId} has been scheduled.`, "TRIP", { tripId: trip[0]._id });
+    await sendTripDayReminder(trip[0], reservedDriver);
     emit("admin-room", "allocation:updated", { requestId, tripId });
     emit(`driver-room-${driverId}`, "trip:updated", { tripId });
     return trip[0];
@@ -169,7 +172,7 @@ export async function scheduleApprovedRequest({ requestId, actor }) {
     request.status = "APPROVED_AWAITING_VEHICLE";
     request.history.push({ status: request.status, actorId: actor?._id, note: "No eligible vehicle and driver are currently available." });
     await request.save();
-    const admins = await User.find({ role: { $in: ["TRANSPORT_ADMIN", "SUPER_ADMIN"] }, isActive: true }).select("_id");
+    const admins = await User.find({ role: "TRANSPORT_ADMIN", isActive: true }).select("_id");
     await Promise.all(admins.map((admin) => notify(admin._id, "Vehicle needed", `Request ${request.requestId} is approved but no eligible vehicle and driver are available.`, "REQUEST", { requestId: request._id })));
     return { request, allocations: [] };
   }
@@ -278,6 +281,11 @@ export async function verifyQr({ tripId, qrToken, driver }) {
     error.status = 403;
     throw error;
   }
+  if (!isTodayInIndia(trip.scheduledStartTime)) {
+    const error = new Error("QR verification is available only on the scheduled trip date.");
+    error.status = 403;
+    throw error;
+  }
   if (!["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip.status)) {
     const error = new Error("Only scheduled trips can be QR verified.");
     error.status = 400;
@@ -318,6 +326,11 @@ export async function startTrip({ tripId, actor, startKM, qrToken, location }) {
   if (trip.status !== "SCHEDULED") {
     const error = new Error("Trip cannot be started in its current status.");
     error.status = 400;
+    throw error;
+  }
+  if (!isTodayInIndia(trip.scheduledStartTime)) {
+    const error = new Error("Trips can be started only on their scheduled date.");
+    error.status = 403;
     throw error;
   }
   if (!trip.qrVerifiedAt) {
