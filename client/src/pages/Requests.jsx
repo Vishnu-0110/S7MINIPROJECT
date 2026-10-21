@@ -64,8 +64,8 @@ export default function Requests() {
             render: (row) =>
               <div className="flex flex-wrap items-center gap-2">
                 <button className="btn btn-ghost btn-xs" onClick={() => showApprovalDetails(row._id)} disabled={detailsLoading} title="View approval progress"><Eye className="h-3 w-3" />Progress</button>
-                {canAllocate && row.status === "APPROVED" ? <Link className="link link-primary" to={`/requests/${row._id}/allocation`}>Allocate</Link> : null}
-                {["PENDING_APPROVAL", "APPROVED"].includes(row.status) && (user?.role === "FACULTY_STAFF" || canAllocate) ? <button className="link link-error" onClick={() => cancelRequest(row._id)}>Cancel</button> : null}
+                {canAllocate && row.status === "APPROVED_AWAITING_VEHICLE" ? <Link className="link link-primary" to={`/requests/${row._id}/allocation`}>Find vehicle</Link> : null}
+                {["PENDING_APPROVAL", "APPROVED", "APPROVED_AWAITING_VEHICLE"].includes(row.status) && (user?.role === "FACULTY_STAFF" || canAllocate) ? <button className="link link-error" onClick={() => cancelRequest(row._id)}>Cancel</button> : null}
               </div>
           }
         ]}
@@ -83,7 +83,7 @@ function ApprovalTimeline({ details, onClose }) {
         <div>
           <p className="page-kicker">Approval progress</p>
           <h3 className="text-lg font-semibold">{request.requestId} · {request.status.replaceAll("_", " ")}</h3>
-          <p className="mt-1 text-sm text-slate-500">Each step is updated as the responsible member approves or rejects the request.</p>
+          <p className="mt-1 text-sm text-slate-500">Approval version {request.approvalVersion || 1}. Both the Department Coordinator and Transport Administrator must approve before a vehicle is assigned.</p>
         </div>
         <button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
       </div>

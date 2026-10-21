@@ -9,7 +9,6 @@ import {
   LogOut,
   Map,
   QrCode,
-  Settings,
   ShieldAlert,
   FileText,
   Users,
@@ -36,12 +35,11 @@ const nav = [
   { to: "/tracking", label: "Track Vehicles", icon: Map, group: "more", roles: ["FACULTY_STAFF", "TRANSPORT_ADMIN", "SUPER_ADMIN"] },
   { to: "/analytics", label: "Analytics", icon: BarChart3, group: "more", roles: ["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"] },
   { to: "/reports", label: "Reports", icon: FileText, group: "more", roles: ["TRANSPORT_ADMIN", "SUPER_ADMIN"] },
-  { to: "/emergencies", label: "Emergency Alerts", icon: ShieldAlert, group: "more", roles: ["DRIVER", "TRANSPORT_ADMIN", "SUPER_ADMIN"] },
+  { to: "/emergencies", label: "Emergency Alerts", icon: ShieldAlert, group: "more", roles: ["DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"] },
   { to: "/vehicle-documents", label: "Vehicle Documents", icon: FileText, group: "more", roles: ["TRANSPORT_ADMIN", "SUPER_ADMIN"] },
   { to: "/users", label: "Users", icon: Users, group: "more", roles: ["TRANSPORT_ADMIN", "SUPER_ADMIN"] },
   { to: "/departments", label: "Departments", icon: Users, group: "more", roles: ["TRANSPORT_ADMIN", "SUPER_ADMIN"] },
   { to: "/ai", label: "Help Assistant", icon: Bot, group: "more" },
-  { to: "/settings", label: "System Settings", icon: Settings, group: "more", roles: ["TRANSPORT_ADMIN", "SUPER_ADMIN"] }
 ];
 
 export default function Layout() {
@@ -115,8 +113,9 @@ export default function Layout() {
                 <p className="text-xs text-slate-400">Centralized transport</p>
               </div>
               </div>
-              <button className="btn btn-square btn-ghost rounded-xl text-slate-300 hover:bg-white/10 hover:text-white lg:hidden" onClick={() => setMenuOpen(false)} aria-label="Close menu">
+              <button type="button" className="btn btn-sm gap-1 rounded-xl border-0 bg-white/10 px-3 text-slate-100 hover:bg-white/20 hover:text-white lg:hidden" onClick={() => setMenuOpen(false)} aria-label="Close menu">
                 <X className="h-5 w-5" />
+                <span>Close</span>
               </button>
             </div>
             <div className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Main menu</div>

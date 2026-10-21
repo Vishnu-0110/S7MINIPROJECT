@@ -26,6 +26,7 @@ export function configureSockets(io) {
     if (socket.user) {
       socket.join(`user-room-${socket.user._id}`);
       if (["TRANSPORT_ADMIN", "SUPER_ADMIN"].includes(socket.user.role)) socket.join("admin-room");
+      if (socket.user.role === "DEPARTMENT_COORDINATOR" && socket.user.departmentId) socket.join(`coordinator-room-${socket.user.departmentId}`);
       if (socket.user.role === "DRIVER") {
         const driver = await Driver.findOne({ userId: socket.user._id });
         if (driver) socket.join(`driver-room-${driver._id}`);

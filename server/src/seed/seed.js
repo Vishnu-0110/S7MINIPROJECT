@@ -9,7 +9,6 @@ import {
   FuelLog,
   Maintenance,
   Notification,
-  SystemSetting,
   Trip,
   User,
   Vehicle,
@@ -36,7 +35,6 @@ async function resetDevelopmentData() {
     Maintenance.deleteMany({}),
     Expense.deleteMany({}),
     Notification.deleteMany({}),
-    SystemSetting.deleteMany({})
   ]);
 }
 
@@ -112,16 +110,6 @@ async function seed() {
       risk: "HIGH",
       status: "SCHEDULED",
       notes: "Demo maintenance conflict"
-    },
-    { upsert: true, new: true }
-  );
-
-  await SystemSetting.findOneAndUpdate(
-    { key: "allocationWeights" },
-    {
-      key: "allocationWeights",
-      value: { capacity: 30, availability: 25, distance: 20, maintenance: 15, driver: 10 },
-      description: "Smart allocation scoring weights"
     },
     { upsert: true, new: true }
   );

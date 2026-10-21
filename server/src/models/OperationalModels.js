@@ -101,10 +101,23 @@ const emergencyAlertSchema = new mongoose.Schema(
     tripId: { type: mongoose.Schema.Types.ObjectId, ref: "Trip" },
     vehicleId: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle" },
     driverId: { type: mongoose.Schema.Types.ObjectId, ref: "Driver" },
+    requestId: { type: mongoose.Schema.Types.ObjectId, ref: "VehicleRequest" },
+    reporterId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    reporterRole: String,
+    kind: { type: String, enum: ["EMERGENCY", "BREAKDOWN"], default: "EMERGENCY" },
+    severity: { type: String, enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"], default: "HIGH" },
     message: String,
     status: { type: String, enum: ["OPEN", "ACKNOWLEDGED", "RESOLVED"], default: "OPEN" },
     location: Object,
-    resolvedAt: Date
+    lastKnownLocation: Object,
+    idempotencyKey: { type: String, sparse: true, unique: true },
+    acknowledgedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    acknowledgedAt: Date,
+    resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    resolvedAt: Date,
+    resolutionNotes: String,
+    silencedBy: [{ userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, at: { type: Date, default: Date.now } }],
+    events: [{ action: String, actorId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, note: String, at: { type: Date, default: Date.now } }]
   },
   { timestamps: true, collection: "emergency_alerts" }
 );
@@ -112,6 +125,7 @@ emergencyAlertSchema.index({ tripId: 1 });
 emergencyAlertSchema.index({ vehicleId: 1 });
 emergencyAlertSchema.index({ status: 1 });
 emergencyAlertSchema.index({ createdAt: -1 });
+emergencyAlertSchema.index({ kind: 1, status: 1, createdAt: -1 });
 
 const vehicleDocumentSchema = new mongoose.Schema(
   {
@@ -158,14 +172,6 @@ auditLogSchema.index({ actorId: 1 });
 auditLogSchema.index({ entity: 1, entityId: 1 });
 auditLogSchema.index({ createdAt: -1 });
 
-const systemSettingSchema = new mongoose.Schema(
-  {
-    key: { type: String, required: true, unique: true },
-    value: mongoose.Schema.Types.Mixed,
-    description: String
-  },
-  { timestamps: true, collection: "system_settings" }
-);
 export const Maintenance = mongoose.model("Maintenance", maintenanceSchema);
 export const FuelLog = mongoose.model("FuelLog", fuelLogSchema);
 export const Expense = mongoose.model("Expense", expenseSchema);
@@ -175,4 +181,3 @@ export const EmergencyAlert = mongoose.model("EmergencyAlert", emergencyAlertSch
 export const VehicleDocument = mongoose.model("VehicleDocument", vehicleDocumentSchema);
 export const DriverIncident = mongoose.model("DriverIncident", driverIncidentSchema);
 export const AuditLog = mongoose.model("AuditLog", auditLogSchema);
-export const SystemSetting = mongoose.model("SystemSetting", systemSettingSchema);

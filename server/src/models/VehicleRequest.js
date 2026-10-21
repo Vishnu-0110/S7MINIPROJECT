@@ -28,8 +28,10 @@ const vehicleRequestSchema = new mongoose.Schema(
     priority: { type: String, enum: PRIORITIES, default: "Normal" },
     supportingDocument: String,
     specialRequirements: String,
+    requiredFacilities: { type: [String], default: [] },
     notes: String,
     status: { type: String, enum: REQUEST_STATUSES, default: "PENDING_APPROVAL" },
+    approvalVersion: { type: Number, default: 1, min: 1 },
     approvalLevel: { type: Number, default: 1 },
     history: [
       {
@@ -49,5 +51,6 @@ vehicleRequestSchema.index({ date: 1 });
 vehicleRequestSchema.index({ status: 1 });
 vehicleRequestSchema.index({ priority: 1 });
 vehicleRequestSchema.index({ tripType: 1, date: 1 });
+vehicleRequestSchema.index({ status: 1, approvalVersion: 1 });
 
 export const VehicleRequest = mongoose.model("VehicleRequest", vehicleRequestSchema);

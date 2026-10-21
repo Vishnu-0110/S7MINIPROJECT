@@ -1,5 +1,5 @@
-import { Html5QrcodeScanner } from "html5-qrcode";
-import { Navigation, QrCode, SquareCheckBig } from "lucide-react";
+import { Html5Qrcode, Html5QrcodeScanner } from "html5-qrcode";
+import { AlertTriangle, Camera, ImageUp, Navigation, QrCode, SquareCheckBig, Wrench } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import LoadingState from "../components/LoadingState.jsx";
@@ -15,13 +15,18 @@ export default function TripDetails() {
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ startKM: "", endKM: "", fuelUsed: "", actualCost: "" });
   const [loading, setLoading] = useState(true);
+  const [incidentBusy, setIncidentBusy] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
   const scannerRef = useRef(null);
 
   async function load() {
     try {
-      const [tripResult, qrResult] = await Promise.all([api.get(`/trips/${id}`), api.get(`/trips/${id}/qr`)]);
+      const [tripResult, qrResult] = await Promise.all([
+        api.get(`/trips/${id}`),
+        user.role === "DRIVER" ? Promise.resolve(null) : api.get(`/trips/${id}/qr`)
+      ]);
       setTrip(tripResult.data);
-      setQr(qrResult.data.qr);
+      setQr(qrResult?.data?.qr || "");
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -31,16 +36,16 @@ export default function TripDetails() {
 
   useEffect(() => {
     load();
-  }, [id]);
+  }, [id, user.role]);
 
   useEffect(() => {
-    if (user.role !== "DRIVER" || trip?.status !== "SCHEDULED") return undefined;
+    if (user.role !== "DRIVER" || !["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip?.status)) return undefined;
     const scanner = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: { width: 200, height: 200 } }, false);
     scanner.render(
       (decoded) => {
         setToken(decoded);
-        setMessage("QR captured");
-        scanner.clear();
+        setMessage("QR captured. Verify it to continue.");
+        scanner.clear().catch(() => undefined);
       },
       () => undefined
     );
@@ -52,10 +57,30 @@ export default function TripDetails() {
     };
   }, [user.role, trip?.status]);
 
+  async function scanQrImage(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setUploadBusy(true);
+    try {
+      await scannerRef.current?.clear().catch(() => undefined);
+      const imageScanner = new Html5Qrcode("qr-file-reader");
+      const decoded = await imageScanner.scanFile(file, true);
+      setToken(decoded);
+      setMessage("QR image read successfully. Verify it to continue.");
+      await imageScanner.clear().catch(() => undefined);
+    } catch {
+      setMessage("The selected image does not contain a readable trip QR code. Try a clearer image or use the camera.");
+    } finally {
+      setUploadBusy(false);
+    }
+  }
+
   async function verify() {
     try {
       await api.post(`/trips/${id}/qr/verify`, { qrToken: token });
-      setMessage("QR verified. You can now start the trip.");
+      setMessage(trip.status === "SCHEDULED" ? "QR verified. You can now start the trip." : "Replacement verified. The trip has resumed.");
+      await load();
     } catch (error) {
       setMessage(error.message);
     }
@@ -90,6 +115,28 @@ export default function TripDetails() {
     }
   }
 
+  async function reportIncident(type) {
+    const prompt = type === "breakdown" ? "Describe the breakdown" : "Describe the emergency";
+    const incidentMessage = window.prompt(prompt);
+    if (!incidentMessage?.trim()) return;
+    setIncidentBusy(true);
+    try {
+      const location = await currentLocation();
+      if (type === "breakdown") {
+        await api.post("/breakdowns", { tripId: trip._id, message: incidentMessage, severity: "HIGH", location });
+        setMessage("Breakdown reported. The system is searching for a safe replacement vehicle.");
+      } else {
+        await api.post("/emergencies", { tripId: trip._id, message: incidentMessage, severity: "HIGH", location });
+        setMessage("Emergency alert sent successfully. The Transport Administrator and Department Coordinator have been notified.");
+      }
+      await load();
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setIncidentBusy(false);
+    }
+  }
+
   if (loading) return <LoadingState />;
 
   return (
@@ -107,6 +154,7 @@ export default function TripDetails() {
           <p>Fuel efficiency: {trip.fuelEfficiency || "-"} km/L</p>
         </div>
         {message ? <div className="alert mt-4">{message}</div> : null}
+        {trip.replacementStatus && trip.replacementStatus !== "NONE" ? <div className="alert alert-warning mt-4">Replacement status: {trip.replacementStatus.replaceAll("_", " ")}</div> : null}
       </div>
       <aside className="space-y-4">
         <div className="rounded-lg border border-slate-200 bg-white p-5">
@@ -115,11 +163,18 @@ export default function TripDetails() {
             <h3 className="font-semibold">QR Trip Verification</h3>
           </div>
           {qr ? <img className="mx-auto mt-4 h-56 w-56" src={qr} alt="Trip QR code" /> : null}
-          {user.role === "DRIVER" && trip.status === "SCHEDULED" ? (
+          {user.role === "DRIVER" && ["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip.status) ? (
             <div className="mt-4 space-y-3">
+              <p className="text-sm text-slate-600">Ask the faculty member to show the trip QR code, then scan it with your camera or upload a saved QR image.</p>
+              <div className="flex items-center gap-2 text-sm font-medium text-primary"><Camera className="h-4 w-4" /> Camera scan</div>
               <div id="qr-reader" aria-label="Camera QR code scanner" />
-              <input className="input input-bordered w-full" value={token} onChange={(event) => setToken(event.target.value)} placeholder="Scanned QR token" />
-              <button className="btn btn-secondary w-full" onClick={verify}>
+              <div id="qr-file-reader" className="hidden" aria-hidden="true" />
+              <label className={`btn btn-outline w-full ${uploadBusy ? "btn-disabled" : ""}`}>
+                <ImageUp className="h-4 w-4" />
+                {uploadBusy ? "Reading QR image..." : "Upload QR image"}
+                <input className="hidden" type="file" accept="image/*" capture="environment" onChange={scanQrImage} disabled={uploadBusy} />
+              </label>
+              <button className="btn btn-secondary w-full" onClick={verify} disabled={!token}>
                 <SquareCheckBig className="h-4 w-4" />
                 Verify QR
               </button>
@@ -133,6 +188,8 @@ export default function TripDetails() {
                 <input className="input input-bordered w-full" min="0" type="number" value={form.startKM} onChange={(event) => setForm((current) => ({ ...current, startKM: event.target.value }))} placeholder="Starting odometer (KM)" />
                 <button className="btn btn-success w-full" onClick={start} disabled={!form.startKM || !token}>Start trip</button>
               </> : null}
+              {["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status) ? <button className="btn btn-error w-full" onClick={() => reportIncident("breakdown")} disabled={incidentBusy}><Wrench className="h-4 w-4" /> Report breakdown</button> : null}
+              {["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED", "TRANSFER_OR_VERIFICATION_PENDING"].includes(trip.status) ? <button className="btn btn-error btn-outline w-full" onClick={() => reportIncident("emergency")} disabled={incidentBusy}><AlertTriangle className="h-4 w-4" /> Emergency alert</button> : null}
               {trip.status === "TRIP_STARTED" ? <>
                 <input className="input input-bordered w-full" min={trip.startKM || 0} type="number" value={form.endKM} onChange={(event) => setForm((current) => ({ ...current, endKM: event.target.value }))} placeholder="Ending odometer (KM)" />
                 <input className="input input-bordered w-full" min="0" type="number" value={form.fuelUsed} onChange={(event) => setForm((current) => ({ ...current, fuelUsed: event.target.value }))} placeholder="Fuel used (liters)" />
@@ -146,6 +203,7 @@ export default function TripDetails() {
           <div className="rounded-lg border border-slate-200 bg-white p-5">
             <Navigation className="mb-2 h-5 w-5 text-primary" />
             <p className="text-sm text-slate-600">Live GPS updates appear in the tracking screen when the driver starts sending location records.</p>
+            {user.role === "FACULTY_STAFF" && ["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED", "TRANSFER_OR_VERIFICATION_PENDING"].includes(trip.status) ? <button className="btn btn-error mt-4 w-full" onClick={() => reportIncident("emergency")} disabled={incidentBusy}><AlertTriangle className="h-4 w-4" /> Emergency alert</button> : null}
           </div>
         )}
       </aside>

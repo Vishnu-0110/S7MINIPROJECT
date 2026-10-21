@@ -1,4 +1,4 @@
-import { Driver, Maintenance, SystemSetting, Trip, Vehicle, VehicleAllocation } from "../models/index.js";
+import { Driver, Maintenance, Trip, Vehicle, VehicleAllocation } from "../models/index.js";
 import { humanId } from "../utils/id.js";
 
 const defaultWeights = {
@@ -22,9 +22,15 @@ function estimateDistanceKm(request) {
   return 60;
 }
 
+export function vehicleSupportsRequest(vehicle, request) {
+  const required = (request.requiredFacilities || []).map((value) => value.trim().toLowerCase());
+  if (!required.length) return true;
+  const available = new Set((vehicle.facilities || []).map((value) => value.trim().toLowerCase()));
+  return required.every((facility) => available.has(facility));
+}
+
 export async function getAllocationWeights() {
-  const setting = await SystemSetting.findOne({ key: "allocationWeights" });
-  return setting?.value || defaultWeights;
+  return defaultWeights;
 }
 
 export async function vehicleHasScheduleConflict(vehicleId, start, end) {
@@ -54,7 +60,8 @@ export async function scoreVehicleForRequest({ request, vehicle, driver, mainten
   const distanceKm = estimateDistanceKm(request);
   const spareCapacity = vehicle.capacity - passengerCount;
   const capacityScore = spareCapacity < 0 ? 0 : clamp(100 - Math.min(spareCapacity * 2, 45));
-  const availabilityScore = vehicle.status === "AVAILABLE" && !vehicleConflict ? 100 : 0;
+  const facilityCompatible = vehicleSupportsRequest(vehicle, request);
+  const availabilityScore = vehicle.status === "AVAILABLE" && !vehicleConflict && facilityCompatible ? 100 : 0;
   const distanceScore = clamp((vehicle.mileageKmPerLiter || 4) * 14 - distanceKm / 10);
   const maintenanceScore = maintenanceConflict || vehicle.status === "MAINTENANCE" || vehicle.status === "BREAKDOWN" ? 0 : vehicle.condition === "EXCELLENT" ? 100 : vehicle.condition === "GOOD" ? 85 : vehicle.condition === "FAIR" ? 55 : 25;
   const driverAvailabilityScore = driver && driver.status === "AVAILABLE" && !driverConflict ? 100 : 0;
@@ -71,6 +78,7 @@ export async function scoreVehicleForRequest({ request, vehicle, driver, mainten
   const reasons = [];
   if (capacityScore > 0) reasons.push("Capacity suitable");
   if (availabilityScore === 100) reasons.push("Vehicle available");
+  if (facilityCompatible && request.requiredFacilities?.length) reasons.push("Required facilities available");
   if (driverAvailabilityScore === 100) reasons.push("Driver available");
   if (maintenanceScore >= 80) reasons.push("No maintenance conflict");
   if (distanceScore >= 60) reasons.push("Efficient choice");
@@ -89,9 +97,9 @@ export async function scoreVehicleForRequest({ request, vehicle, driver, mainten
   };
 }
 
-export async function runSmartAllocation(request) {
+export async function runSmartAllocation(request, { excludeVehicleIds = [] } = {}) {
   const weights = await getAllocationWeights();
-  const vehicles = await Vehicle.find({ status: { $in: ["AVAILABLE", "MAINTENANCE", "BREAKDOWN"] } }).lean();
+  const vehicles = await Vehicle.find({ _id: { $nin: excludeVehicleIds }, status: "AVAILABLE" }).lean();
   const drivers = await Driver.find({ status: "AVAILABLE" }).lean();
   const start = request.departureTime;
   const end = request.returnTime;

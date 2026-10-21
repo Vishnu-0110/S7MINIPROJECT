@@ -15,7 +15,6 @@ export {
   EmergencyAlert,
   VehicleDocument,
   DriverIncident,
-  AuditLog,
-  SystemSetting
+  AuditLog
 } from "./OperationalModels.js";
 export { ROLES, REQUEST_STATUSES, TRIP_TYPES, PRIORITIES } from "./enums.js";

@@ -70,6 +70,9 @@ export async function getTrip(req, res) {
 export async function tripQr(req, res) {
   const trip = await Trip.findById(req.params.id).select("facultyId departmentId driverId");
   await assertTripAccess(trip, req.user);
+  if (req.user.role === "DRIVER") {
+    throw new ApiError("The faculty member must display the trip QR code for the driver to scan.", 403);
+  }
   const payload = { qr: await generateTripQr(req.params.id) };
   return ok(res, "QR generated", payload);
 }

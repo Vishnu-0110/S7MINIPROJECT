@@ -7,6 +7,7 @@ export const vehicleSchema = z.object({
     name: z.string().min(2),
     type: z.string().min(2),
     capacity: z.coerce.number().int().positive(),
+    facilities: z.array(z.string().trim().min(1)).optional().default([]),
     fuelType: z.string().default("Diesel"),
     fuelLevel: z.coerce.number().min(0).max(100).default(75),
     mileageKmPerLiter: z.coerce.number().positive().default(4),

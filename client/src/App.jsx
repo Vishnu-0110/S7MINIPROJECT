@@ -16,7 +16,6 @@ import RequestForm from "./pages/RequestForm.jsx";
 import Requests from "./pages/Requests.jsx";
 import Reports from "./pages/Reports.jsx";
 import SmartAllocation from "./pages/SmartAllocation.jsx";
-import Settings from "./pages/Settings.jsx";
 import TripDetails from "./pages/TripDetails.jsx";
 import Trips from "./pages/Trips.jsx";
 
@@ -47,12 +46,11 @@ export default function App() {
         <Route path="maintenance" element={<Shell roles={["TRANSPORT_ADMIN", "SUPER_ADMIN"]}><OperationsPage resource="maintenance" /></Shell>} />
         <Route path="fuel" element={<Shell roles={["DRIVER", "TRANSPORT_ADMIN", "SUPER_ADMIN"]}><OperationsPage resource="fuel" /></Shell>} />
         <Route path="expenses" element={<Shell roles={["TRANSPORT_ADMIN", "SUPER_ADMIN"]}><OperationsPage resource="expenses" /></Shell>} />
-        <Route path="emergencies" element={<Shell roles={["DRIVER", "TRANSPORT_ADMIN", "SUPER_ADMIN"]}><OperationsPage resource="emergencies" /></Shell>} />
+        <Route path="emergencies" element={<Shell roles={["DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"]}><OperationsPage resource="emergencies" /></Shell>} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="analytics" element={<Shell roles={["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"]}><Analytics /></Shell>} />
         <Route path="reports" element={<Shell roles={["TRANSPORT_ADMIN", "SUPER_ADMIN"]}><Reports /></Shell>} />
         <Route path="ai" element={<AiAssistant />} />
-        <Route path="settings" element={<Shell roles={["TRANSPORT_ADMIN", "SUPER_ADMIN"]}><Settings /></Shell>} />
       </Route>
     </Routes>
   );

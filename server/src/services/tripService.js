@@ -7,12 +7,14 @@ import {
   Trip,
   Vehicle,
   VehicleAllocation,
-  VehicleRequest
+  VehicleRequest,
+  User
 } from "../models/index.js";
 import { humanId, makeQrToken } from "../utils/id.js";
 import { audit } from "./auditService.js";
 import { assertNoDoubleBooking } from "./bookingService.js";
 import { notify } from "./notificationService.js";
+import { vehicleSupportsRequest } from "./allocationService.js";
 
 let ioRef = null;
 
@@ -29,9 +31,34 @@ export async function createTripFromAssignment({ requestId, vehicleId, driverId,
   session.startTransaction();
   try {
     const request = await VehicleRequest.findById(requestId).session(session);
-    if (!request || request.status !== "APPROVED") {
+    if (!request || !["APPROVED", "APPROVED_AWAITING_VEHICLE"].includes(request.status)) {
       const error = new Error("Only approved requests can be assigned.");
       error.status = 400;
+      throw error;
+    }
+
+    const allocation = allocationId
+      ? await VehicleAllocation.findOne({ _id: allocationId, requestId, vehicleId, driverId }).session(session)
+      : null;
+    if (allocationId && !allocation) {
+      const error = new Error("The selected allocation does not belong to this request and assignment.");
+      error.status = 403;
+      throw error;
+    }
+    if (!allocationId && !override) {
+      const error = new Error("Manual assignment requires an approved allocation or an administrator override.");
+      error.status = 400;
+      throw error;
+    }
+    if (override && !overrideReason?.trim()) {
+      const error = new Error("An administrator override requires a recorded reason.");
+      error.status = 400;
+      throw error;
+    }
+
+    if (await Trip.exists({ requestId }).session(session)) {
+      const error = new Error("This request already has a scheduled trip.");
+      error.status = 409;
       throw error;
     }
 
@@ -42,9 +69,36 @@ export async function createTripFromAssignment({ requestId, vehicleId, driverId,
       endTime: request.returnTime
     });
 
+    const vehicle = await Vehicle.findOneAndUpdate(
+      { _id: vehicleId, status: "AVAILABLE", condition: { $ne: "POOR" }, capacity: { $gte: request.passengerCount } },
+      { status: "ASSIGNED" },
+      { new: true, session }
+    );
+    if (!vehicle) {
+      const error = new Error("Vehicle is no longer available or does not have enough capacity.");
+      error.status = 409;
+      throw error;
+    }
+    if (!vehicleSupportsRequest(vehicle, request)) {
+      const error = new Error("Vehicle does not meet the request's required facilities.");
+      error.status = 409;
+      throw error;
+    }
+    const driver = await Driver.findOne({ _id: driverId }).session(session);
+    if (!driver || driver.status !== "AVAILABLE" || (driver.assignedVehicleTypes?.length && !driver.assignedVehicleTypes.includes(vehicle.type))) {
+      const error = new Error("Driver is no longer available or is not qualified for this vehicle.");
+      error.status = 409;
+      throw error;
+    }
+    const reservedDriver = await Driver.findOneAndUpdate({ _id: driverId, status: "AVAILABLE" }, { status: "ASSIGNED" }, { new: true, session });
+    if (!reservedDriver) {
+      const error = new Error("Driver is no longer available.");
+      error.status = 409;
+      throw error;
+    }
+
     const tripId = humanId("BIT-TRIP");
     const qrToken = makeQrToken(tripId);
-    const allocation = allocationId ? await VehicleAllocation.findById(allocationId).session(session) : null;
     const estimatedCost = allocation?.estimatedCost || 0;
 
     const trip = await Trip.create(
@@ -68,14 +122,13 @@ export async function createTripFromAssignment({ requestId, vehicleId, driverId,
           estimatedCost,
           status: "SCHEDULED",
           qrToken,
-          qrExpiresAt: request.returnTime
+          qrExpiresAt: new Date(Math.min(new Date(request.returnTime).getTime(), new Date(request.departureTime).getTime() + 2 * 60 * 60 * 1000)),
+          assignmentHistory: [{ vehicleId, driverId, assignedBy: actor?._id, reason: override ? overrideReason || "Administrator override" : "Automatic allocation" }]
         }
       ],
       { session }
     );
 
-    await Vehicle.findByIdAndUpdate(vehicleId, { status: "ASSIGNED" }, { session });
-    await Driver.findByIdAndUpdate(driverId, { status: "ASSIGNED" }, { session });
     request.status = "SCHEDULED";
     request.history.push({ status: "SCHEDULED", actorId: actor._id, note: "Vehicle and driver assigned" });
     await request.save({ session });
@@ -96,6 +149,104 @@ export async function createTripFromAssignment({ requestId, vehicleId, driverId,
     return trip[0];
   } catch (error) {
     await session.abortTransaction();
+    if (error?.code === 11000) {
+      error.status = 409;
+      error.message = "This request already has a scheduled trip.";
+    }
+    throw error;
+  } finally {
+    session.endSession();
+  }
+}
+
+export async function scheduleApprovedRequest({ requestId, actor }) {
+  const request = await VehicleRequest.findById(requestId);
+  if (!request || !["APPROVED", "APPROVED_AWAITING_VEHICLE"].includes(request.status)) return null;
+  const { runSmartAllocation } = await import("./allocationService.js");
+  const allocations = await runSmartAllocation(request);
+  const recommendation = allocations[0];
+  if (!recommendation) {
+    request.status = "APPROVED_AWAITING_VEHICLE";
+    request.history.push({ status: request.status, actorId: actor?._id, note: "No eligible vehicle and driver are currently available." });
+    await request.save();
+    const admins = await User.find({ role: { $in: ["TRANSPORT_ADMIN", "SUPER_ADMIN"] }, isActive: true }).select("_id");
+    await Promise.all(admins.map((admin) => notify(admin._id, "Vehicle needed", `Request ${request.requestId} is approved but no eligible vehicle and driver are available.`, "REQUEST", { requestId: request._id })));
+    return { request, allocations: [] };
+  }
+  try {
+    const trip = await createTripFromAssignment({
+      requestId: request._id,
+      vehicleId: recommendation.vehicleId._id || recommendation.vehicleId,
+      driverId: recommendation.driverId._id || recommendation.driverId,
+      allocationId: recommendation._id,
+      actor
+    });
+    return { request, trip, allocations };
+  } catch (error) {
+    if (error.status !== 409) throw error;
+    request.status = "APPROVED_AWAITING_VEHICLE";
+    request.history.push({ status: request.status, actorId: actor?._id, note: "Allocation changed while reserving resources; retry required." });
+    await request.save();
+    return { request, allocations: [] };
+  }
+}
+
+export async function reassignTrip({ tripId, allocation, actor }) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const trip = await Trip.findById(tripId).session(session);
+    if (!trip || !["BREAKDOWN_REPORTED", "REPLACEMENT_SEARCHING", "REPLACEMENT_UNAVAILABLE", "VEHICLE_REASSIGNMENT_REQUIRED", "TRIP_STARTED"].includes(trip.status)) {
+      const error = new Error("Trip is not awaiting a replacement assignment.");
+      error.status = 409;
+      throw error;
+    }
+    const vehicle = await Vehicle.findOneAndUpdate(
+      { _id: allocation.vehicleId, status: "AVAILABLE", capacity: { $gte: trip.passengerCount } },
+      { status: "ASSIGNED" },
+      { new: true, session }
+    );
+    if (!vehicle) {
+      const error = new Error("Replacement vehicle is no longer available.");
+      error.status = 409;
+      throw error;
+    }
+    const driver = await Driver.findOneAndUpdate(
+      { _id: allocation.driverId, status: "AVAILABLE" },
+      { status: "ASSIGNED" },
+      { new: true, session }
+    );
+    if (!driver || (driver.assignedVehicleTypes?.length && !driver.assignedVehicleTypes.includes(vehicle.type))) {
+      const error = new Error("Replacement driver is no longer available or qualified.");
+      error.status = 409;
+      throw error;
+    }
+    const oldVehicleId = trip.vehicleId;
+    const oldDriverId = trip.driverId;
+    const latestAssignment = trip.assignmentHistory.at(-1);
+    if (latestAssignment) latestAssignment.releasedAt = new Date();
+    trip.originalVehicleId ||= oldVehicleId;
+    trip.originalDriverId ||= oldDriverId;
+    trip.assignmentVersion += 1;
+    trip.vehicleId = vehicle._id;
+    trip.driverId = driver._id;
+    trip.status = "TRANSFER_OR_VERIFICATION_PENDING";
+    trip.replacementStatus = "VERIFICATION_PENDING";
+    trip.qrToken = makeQrToken(trip.tripId);
+    trip.qrVerifiedAt = undefined;
+    trip.qrConsumed = false;
+    trip.qrExpiresAt = new Date(Math.min(new Date(trip.scheduledEndTime).getTime(), Date.now() + 2 * 60 * 60 * 1000));
+    trip.assignmentHistory.push({ vehicleId: vehicle._id, driverId: driver._id, assignedBy: actor?._id, reason: "Breakdown replacement" });
+    await trip.save({ session });
+    if (String(oldDriverId) !== String(driver._id)) await Driver.findByIdAndUpdate(oldDriverId, { status: "AVAILABLE" }, { session });
+    await VehicleAllocation.findByIdAndUpdate(allocation._id, { isSelected: true, reallocationForTripId: trip._id }, { session });
+    await session.commitTransaction();
+    await notify(trip.facultyId, "Replacement vehicle assigned", `Trip ${trip.tripId} has a replacement vehicle. Please show the updated QR code to the driver.`, "TRIP", { tripId: trip._id });
+    emit("admin-room", "trip:reallocated", { tripId: trip._id, vehicleId: vehicle._id, driverId: driver._id });
+    emit(`driver-room-${driver._id}`, "trip:updated", { tripId: trip._id, replacement: true });
+    return trip;
+  } catch (error) {
+    await session.abortTransaction();
     throw error;
   } finally {
     session.endSession();
@@ -104,6 +255,14 @@ export async function createTripFromAssignment({ requestId, vehicleId, driverId,
 
 export async function generateTripQr(trip) {
   const freshTrip = await Trip.findById(trip._id || trip).select("+qrToken");
+  if (!freshTrip) throw new Error("Trip not found");
+  if (freshTrip.qrExpiresAt < new Date() && ["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING"].includes(freshTrip.status)) {
+    freshTrip.qrToken = makeQrToken(freshTrip.tripId);
+    freshTrip.qrConsumed = false;
+    freshTrip.qrVerifiedAt = undefined;
+    freshTrip.qrExpiresAt = new Date(Math.min(new Date(freshTrip.scheduledEndTime).getTime(), Date.now() + 2 * 60 * 60 * 1000));
+    await freshTrip.save();
+  }
   return QRCode.toDataURL(freshTrip.qrToken);
 }
 
@@ -119,7 +278,7 @@ export async function verifyQr({ tripId, qrToken, driver }) {
     error.status = 403;
     throw error;
   }
-  if (trip.status !== "SCHEDULED") {
+  if (!["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip.status)) {
     const error = new Error("Only scheduled trips can be QR verified.");
     error.status = 400;
     throw error;
@@ -129,10 +288,23 @@ export async function verifyQr({ tripId, qrToken, driver }) {
     error.status = 400;
     throw error;
   }
-  trip.qrVerifiedAt = new Date();
-  trip.qrConsumed = true;
-  await trip.save();
-  return trip;
+  const resumeTrip = trip.status !== "SCHEDULED";
+  const verified = await Trip.findOneAndUpdate(
+    { _id: trip._id, qrToken, qrConsumed: false, status: trip.status, qrExpiresAt: { $gt: new Date() } },
+    { qrVerifiedAt: new Date(), qrConsumed: true, ...(resumeTrip ? { status: "TRIP_RESUMED", replacementStatus: "NONE" } : {}) },
+    { new: true }
+  );
+  if (!verified) {
+    const error = new Error("QR code has already been used or is no longer valid.");
+    error.status = 409;
+    throw error;
+  }
+  if (resumeTrip) {
+    await Vehicle.findByIdAndUpdate(verified.vehicleId, { status: "IN_TRIP" });
+    await Driver.findByIdAndUpdate(verified.driverId, { status: "IN_TRIP" });
+    await notify(verified.facultyId, "Trip resumed", `Trip ${verified.tripId} has resumed with its replacement assignment.`, "TRIP", { tripId: verified._id });
+  }
+  return verified;
 }
 
 export async function startTrip({ tripId, actor, startKM, qrToken, location }) {
@@ -149,28 +321,29 @@ export async function startTrip({ tripId, actor, startKM, qrToken, location }) {
     throw error;
   }
   if (!trip.qrVerifiedAt) {
-    if (!qrToken || trip.qrToken !== qrToken || (trip.qrExpiresAt && trip.qrExpiresAt < new Date())) {
-      const error = new Error("QR verification is required before starting this trip.");
-      error.status = 400;
-      throw error;
-    }
-    trip.qrVerifiedAt = new Date();
-    trip.qrConsumed = true;
+    const error = new Error("QR verification is required before starting this trip.");
+    error.status = 400;
+    throw error;
   }
-  trip.startKM = startKM;
-  trip.startTime = new Date();
-  trip.status = "TRIP_STARTED";
-  trip.startLocation = location ? { ...location, recordedAt: new Date() } : undefined;
-  await trip.save();
-  await Vehicle.findByIdAndUpdate(trip.vehicleId, { status: "IN_TRIP" });
+  const started = await Trip.findOneAndUpdate(
+    { _id: trip._id, status: "SCHEDULED", qrVerifiedAt: { $exists: true } },
+    { startKM, startTime: new Date(), status: "TRIP_STARTED", startLocation: location ? { ...location, recordedAt: new Date() } : undefined },
+    { new: true }
+  );
+  if (!started) {
+    const error = new Error("Trip start was already processed or QR verification is required.");
+    error.status = 409;
+    throw error;
+  }
+  await Vehicle.findByIdAndUpdate(started.vehicleId, { status: "IN_TRIP" });
   await Driver.findByIdAndUpdate(driver._id, { status: "IN_TRIP" });
   if (location) {
-    await GpsLog.create({ tripId: trip._id, vehicleId: trip.vehicleId, driverId: driver._id, ...location });
+    await GpsLog.create({ tripId: started._id, vehicleId: started.vehicleId, driverId: driver._id, ...location });
   }
-  await notify(trip.facultyId, "Trip started", `Trip ${trip.tripId} has started.`, "TRIP", { tripId: trip._id });
-  emit(`trip-room-${trip._id}`, "trip:started", trip);
-  emit("admin-room", "trip:started", trip);
-  return trip;
+  await notify(started.facultyId, "Trip started", `Trip ${started.tripId} has started.`, "TRIP", { tripId: started._id });
+  emit(`trip-room-${started._id}`, "trip:started", started);
+  emit("admin-room", "trip:started", started);
+  return started;
 }
 
 export async function endTrip({ tripId, actor, endKM, fuelUsed, actualCost, location }) {
@@ -181,7 +354,7 @@ export async function endTrip({ tripId, actor, endKM, fuelUsed, actualCost, loca
     error.status = 403;
     throw error;
   }
-  if (trip.status !== "TRIP_STARTED") {
+  if (!["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status)) {
     const error = new Error("Only started trips can be completed.");
     error.status = 400;
     throw error;
@@ -232,7 +405,7 @@ export async function saveGps({ tripId, actor, payload }) {
     error.status = 403;
     throw error;
   }
-  if (trip.status !== "TRIP_STARTED") {
+  if (!["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status)) {
     const error = new Error("GPS logging is available only after the trip has started.");
     error.status = 400;
     throw error;

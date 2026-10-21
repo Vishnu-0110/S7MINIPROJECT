@@ -17,7 +17,7 @@ const config = {
       { key: "capacity", label: "Capacity" },
       { key: "status", label: "Status" }
     ],
-    fields: ["vehicleId", "registrationNumber", "name", "type", "capacity", "fuelType", "fuelLevel", "mileageKmPerLiter", "currentKM"]
+    fields: ["vehicleId", "registrationNumber", "name", "type", "capacity", "facilities", "fuelType", "fuelLevel", "mileageKmPerLiter", "currentKM"]
   },
   drivers: {
     title: "Driver Management",
@@ -86,7 +86,10 @@ export default function ManagementPage({ resource }) {
   async function submit(event) {
     event.preventDefault();
     try {
-      await api.post(`/${resource}`, form);
+      const payload = resource === "vehicles" && typeof form.facilities === "string"
+        ? { ...form, facilities: form.facilities.split(",").map((value) => value.trim()).filter(Boolean) }
+        : form;
+      await api.post(`/${resource}`, payload);
       setForm(cfg.defaults || {});
       setMessage("Saved");
       await reload();
@@ -136,5 +139,5 @@ function ManagementField({ field, kind, form, setForm, options }) {
   }
   const type = ["capacity", "fuelLevel", "mileageKmPerLiter", "currentKM"].includes(field) ? "number" : field === "expiresAt" ? "date" : "text";
   if (field === "password") return <PasswordField className="input input-bordered w-full" placeholder={field} value={value} onChange={update} />;
-  return <input className="input input-bordered w-full" type={type} min={type === "number" ? "0" : undefined} placeholder={field} value={value} onChange={update} />;
+  return <input className="input input-bordered w-full" type={type} min={type === "number" ? "0" : undefined} placeholder={field === "facilities" ? "facilities, separated by commas" : field} value={value} onChange={update} />;
 }

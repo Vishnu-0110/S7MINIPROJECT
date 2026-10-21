@@ -7,13 +7,14 @@ const vehicleSchema = new mongoose.Schema(
     name: { type: String, required: true },
     type: { type: String, required: true },
     capacity: { type: Number, required: true, min: 1 },
+    facilities: { type: [String], default: [] },
     fuelType: { type: String, default: "Diesel" },
     fuelLevel: { type: Number, default: 75, min: 0, max: 100 },
     mileageKmPerLiter: { type: Number, default: 4 },
     currentKM: { type: Number, default: 0 },
     status: {
       type: String,
-      enum: ["AVAILABLE", "ASSIGNED", "IN_TRIP", "MAINTENANCE", "BREAKDOWN", "INACTIVE"],
+      enum: ["AVAILABLE", "ASSIGNED", "IN_TRIP", "MAINTENANCE", "BREAKDOWN", "BREAKDOWN_REPORTED", "OUT_OF_SERVICE", "INACTIVE"],
       default: "AVAILABLE"
     },
     condition: {

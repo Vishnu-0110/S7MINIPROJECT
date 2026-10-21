@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   breakdown,
+  acknowledgeEmergency,
   createExpense,
   createFuel,
   createMaintenance,
@@ -12,10 +13,13 @@ import {
   markNotificationRead,
   listNotifications,
   raiseEmergency,
-  resolveEmergency
+  resolveEmergency,
+  silenceEmergency
 } from "../controllers/operationsController.js";
 import { requireAuth, requireRoles } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/apiResponse.js";
+import { validate } from "../middleware/validate.js";
+import { breakdownSchema, emergencySchema, incidentNoteSchema } from "../validators/operationsValidators.js";
 
 export const operationRoutes = Router();
 operationRoutes.use(requireAuth);
@@ -29,7 +33,9 @@ operationRoutes.post("/expenses", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN")
 operationRoutes.get("/notifications", asyncHandler(listNotifications));
 operationRoutes.patch("/notifications/:id/read", asyncHandler(markNotificationRead));
 operationRoutes.get("/gps", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(listGps));
-operationRoutes.get("/emergencies", requireRoles("DRIVER", "TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(listEmergencies));
-operationRoutes.post("/emergencies", requireRoles("DRIVER", "TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(raiseEmergency));
-operationRoutes.patch("/emergencies/:id", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(resolveEmergency));
-operationRoutes.post("/breakdowns", requireRoles("DRIVER", "TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(breakdown));
+operationRoutes.get("/emergencies", requireRoles("FACULTY_STAFF", "DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(listEmergencies));
+operationRoutes.post("/emergencies", requireRoles("FACULTY_STAFF", "DRIVER", "TRANSPORT_ADMIN", "SUPER_ADMIN"), validate(emergencySchema), asyncHandler(raiseEmergency));
+operationRoutes.post("/emergencies/:id/acknowledge", requireRoles("DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"), validate(incidentNoteSchema), asyncHandler(acknowledgeEmergency));
+operationRoutes.post("/emergencies/:id/silence", requireRoles("DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(silenceEmergency));
+operationRoutes.patch("/emergencies/:id", requireRoles("DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN", "SUPER_ADMIN"), validate(incidentNoteSchema), asyncHandler(resolveEmergency));
+operationRoutes.post("/breakdowns", requireRoles("DRIVER", "TRANSPORT_ADMIN", "SUPER_ADMIN"), validate(breakdownSchema), asyncHandler(breakdown));

@@ -15,7 +15,8 @@ const schema = z.object({
   date: z.string().min(1),
   departureTime: z.string().min(1),
   returnTime: z.string().min(1),
-  priority: z.string()
+  priority: z.string(),
+  requiredFacilities: z.string().optional()
 });
 
 const tripTypes = ["Local Official Visit", "Industrial Visit", "Field Trip", "Conference", "Placement", "Event", "Academic Visit", "Outstation Trip", "Other Official Trip"];
@@ -80,6 +81,7 @@ export default function RequestForm() {
       }
       const payload = {
         ...values,
+        requiredFacilities: values.requiredFacilities?.split(",").map((value) => value.trim()).filter(Boolean) || [],
         date: values.date,
         departureTime: `${values.date}T${values.departureTime}`,
         returnTime: `${values.date}T${values.returnTime}`,
@@ -113,6 +115,7 @@ export default function RequestForm() {
           <input className="input input-bordered" type="date" {...register("date")} />
           <input className="input input-bordered" type="time" {...register("departureTime")} />
           <input className="input input-bordered" type="time" {...register("returnTime")} />
+          <input className="input input-bordered md:col-span-2" placeholder="Required facilities, separated by commas (for example: wheelchair access, air conditioning)" {...register("requiredFacilities")} />
           <textarea className="textarea textarea-bordered md:col-span-2" placeholder="Special requirements" {...register("specialRequirements")} />
           {formState.errors.root ? <p className="text-sm text-error md:col-span-2">{formState.errors.root.message}</p> : null}
           <button className="btn btn-primary md:col-span-2" disabled={formState.isSubmitting}>

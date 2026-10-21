@@ -6,7 +6,11 @@ export const assignSchema = z.object({
     vehicleId: z.string().min(1),
     driverId: z.string().min(1),
     override: z.boolean().optional(),
-    overrideReason: z.string().optional()
+    overrideReason: z.string().trim().min(2).max(1000).optional()
+  }).superRefine((data, ctx) => {
+    if (data.override && !data.overrideReason) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["overrideReason"], message: "An override reason is required." });
+    }
   })
 });
 

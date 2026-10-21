@@ -44,12 +44,26 @@ const tripSchema = new mongoose.Schema(
     qrToken: { type: String, required: true, unique: true, select: false },
     qrVerifiedAt: Date,
     qrExpiresAt: Date,
-    qrConsumed: { type: Boolean, default: false }
+    qrConsumed: { type: Boolean, default: false },
+    assignmentVersion: { type: Number, default: 1, min: 1 },
+    originalVehicleId: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle" },
+    originalDriverId: { type: mongoose.Schema.Types.ObjectId, ref: "Driver" },
+    replacementStatus: { type: String, enum: ["NONE", "SEARCHING", "ASSIGNED", "UNAVAILABLE", "VERIFICATION_PENDING"], default: "NONE" },
+    assignmentHistory: [
+      {
+        vehicleId: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle" },
+        driverId: { type: mongoose.Schema.Types.ObjectId, ref: "Driver" },
+        assignedAt: { type: Date, default: Date.now },
+        releasedAt: Date,
+        reason: String,
+        assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+      }
+    ]
   },
   { timestamps: true, collection: "trips" }
 );
 
-tripSchema.index({ requestId: 1 });
+tripSchema.index({ requestId: 1 }, { unique: true });
 tripSchema.index({ vehicleId: 1 });
 tripSchema.index({ driverId: 1 });
 tripSchema.index({ facultyId: 1 });
@@ -59,5 +73,6 @@ tripSchema.index({ startTime: 1 });
 tripSchema.index({ status: 1 });
 tripSchema.index({ vehicleId: 1, scheduledStartTime: 1, scheduledEndTime: 1 });
 tripSchema.index({ driverId: 1, scheduledStartTime: 1, scheduledEndTime: 1 });
+tripSchema.index({ replacementStatus: 1, status: 1 });
 
 export const Trip = mongoose.model("Trip", tripSchema);

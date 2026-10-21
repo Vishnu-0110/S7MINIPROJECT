@@ -7,7 +7,8 @@ const approvalSchema = new mongoose.Schema(
     approverId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     approverRole: { type: String, required: true },
     level: { type: Number, required: true },
-    status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"], default: "PENDING" },
+    version: { type: Number, required: true, default: 1 },
+    status: { type: String, enum: ["PENDING", "APPROVED", "REJECTED", "INVALIDATED"], default: "PENDING" },
     comments: String,
     approvedAt: Date,
     rejectedAt: Date
@@ -18,5 +19,6 @@ const approvalSchema = new mongoose.Schema(
 approvalSchema.index({ requestId: 1 });
 approvalSchema.index({ approverId: 1 });
 approvalSchema.index({ status: 1 });
+approvalSchema.index({ requestId: 1, approverRole: 1, version: 1 }, { unique: true });
 
 export const Approval = mongoose.model("Approval", approvalSchema);

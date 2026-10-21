@@ -1,12 +1,10 @@
 import mongoose from "mongoose";
-import { Approval, VehicleRequest } from "../models/index.js";
+import { Approval, User, VehicleRequest } from "../models/index.js";
 import { humanId } from "../utils/id.js";
 import { audit } from "./auditService.js";
 import { notify } from "./notificationService.js";
 
 export function approvalChainForTripType(tripType) {
-  if (tripType === "Local Official Visit") return ["TRANSPORT_ADMIN"];
-  if (tripType === "Outstation Trip") return ["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"];
   return ["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"];
 }
 
@@ -17,9 +15,27 @@ export async function createApprovalsForRequest(request) {
     requestId: request._id,
     approverRole: role,
     level: index + 1,
+    version: request.approvalVersion,
     status: index === 0 ? "PENDING" : "PENDING"
   }));
   return Approval.insertMany(docs);
+}
+
+export async function notifyApprovalParticipants(request) {
+  const recipients = await User.find({
+    isActive: true,
+    $or: [
+      { role: "TRANSPORT_ADMIN" },
+      { role: "DEPARTMENT_COORDINATOR", departmentId: request.departmentId }
+    ]
+  }).select("_id");
+  await Promise.all(recipients.map((user) => notify(
+    user._id,
+    "Approval required",
+    `Request ${request.requestId} needs your approval.`,
+    "REQUEST",
+    { requestId: request._id, approvalVersion: request.approvalVersion }
+  )));
 }
 
 export async function decideApproval({ requestId, actor, status, comments }) {
@@ -33,10 +49,34 @@ export async function decideApproval({ requestId, actor, status, comments }) {
       throw error;
     }
 
-    const approval = await Approval.findOne({ requestId, status: "PENDING" }).sort({ level: 1 }).session(session);
+    if (request.status !== "PENDING_APPROVAL") {
+      const error = new Error("This request is not awaiting approval.");
+      error.status = 409;
+      throw error;
+    }
 
-    if (!approval || approval.approverRole !== actor.role) {
-      const error = new Error("No pending approval is available for this role at the current approval level.");
+    if (
+      actor.role === "DEPARTMENT_COORDINATOR" &&
+      String(request.departmentId) !== String(actor.departmentId)
+    ) {
+      const error = new Error("Department Coordinators can only decide requests from their own department.");
+      error.status = 403;
+      throw error;
+    }
+
+    const approverRole = actor.role === "SUPER_ADMIN" ? "TRANSPORT_ADMIN" : actor.role;
+    const versionFilter = request.approvalVersion === 1
+      ? { $or: [{ version: 1 }, { version: { $exists: false } }] }
+      : { version: request.approvalVersion };
+    const approval = await Approval.findOne({
+      requestId,
+      approverRole,
+      status: "PENDING",
+      ...versionFilter
+    }).session(session);
+
+    if (!approval) {
+      const error = new Error("No pending approval is available for this role and request version.");
       error.status = 403;
       throw error;
     }
@@ -52,9 +92,9 @@ export async function decideApproval({ requestId, actor, status, comments }) {
       request.status = "REJECTED";
       request.history.push({ status: "REJECTED", actorId: actor._id, note: comments });
     } else {
-      const pending = await Approval.countDocuments({ requestId, status: "PENDING" }).session(session);
-      request.status = pending === 0 ? "APPROVED" : "PENDING_APPROVAL";
-      request.approvalLevel = approval.level + 1;
+      const pending = await Approval.countDocuments({ requestId, status: "PENDING", ...versionFilter }).session(session);
+      request.status = pending === 0 ? "APPROVED_AWAITING_VEHICLE" : "PENDING_APPROVAL";
+      request.approvalLevel = pending === 0 ? 2 : approval.level;
       request.history.push({ status: request.status, actorId: actor._id, note: comments });
     }
     await request.save({ session });
@@ -64,7 +104,7 @@ export async function decideApproval({ requestId, actor, status, comments }) {
     });
     await session.commitTransaction();
 
-    await notify(request.facultyId, "Request updated", `Your request ${request.requestId} is ${request.status}.`, "REQUEST", {
+    await notify(request.facultyId, "Request updated", `Your request ${request.requestId} is ${request.status.replaceAll("_", " ")}.`, "REQUEST", {
       requestId: request._id
     });
     return request;

@@ -1,8 +1,10 @@
-import { EmergencyAlert, Expense, FuelLog, GpsLog, Maintenance, Notification, Vehicle, Driver, Trip, VehicleRequest, VehicleAllocation } from "../models/index.js";
+import { EmergencyAlert, Expense, FuelLog, GpsLog, Maintenance, Notification, Vehicle, Driver, Trip, VehicleRequest, User } from "../models/index.js";
 import { ok } from "../utils/apiResponse.js";
 import { humanId } from "../utils/id.js";
 import { parsePagination, paginationPayload } from "../utils/pagination.js";
 import { runSmartAllocation } from "../services/allocationService.js";
+import { reassignTrip } from "../services/tripService.js";
+import { notify } from "../services/notificationService.js";
 
 function listFor(Model, baseQuery = {}) {
   return async (req, res) => {
@@ -32,7 +34,39 @@ export async function listEmergencies(req, res) {
     const driver = await Driver.findOne({ userId: req.user._id });
     return listFor(EmergencyAlert, { driverId: driver?._id || null })(req, res);
   }
+  if (req.user.role === "FACULTY_STAFF") {
+    const tripIds = await Trip.distinct("_id", { facultyId: req.user._id });
+    return listFor(EmergencyAlert, { tripId: { $in: tripIds } })(req, res);
+  }
+  if (req.user.role === "DEPARTMENT_COORDINATOR") {
+    const tripIds = await Trip.distinct("_id", { departmentId: req.user.departmentId });
+    return listFor(EmergencyAlert, { tripId: { $in: tripIds } })(req, res);
+  }
   return listFor(EmergencyAlert)(req, res);
+}
+
+async function incidentRecipients(trip) {
+  return User.find({
+    isActive: true,
+    $or: [
+      { role: { $in: ["TRANSPORT_ADMIN", "SUPER_ADMIN"] } },
+      { role: "DEPARTMENT_COORDINATOR", departmentId: trip.departmentId }
+    ]
+  }).select("_id");
+}
+
+async function notifyIncident(trip, alert, title, message) {
+  const recipients = await incidentRecipients(trip);
+  await Promise.all(recipients.map((user) => notify(user._id, title, message, "EMERGENCY", { incidentId: alert._id, tripId: trip._id })));
+}
+
+async function assertIncidentManager(alert, user) {
+  if (["TRANSPORT_ADMIN", "SUPER_ADMIN"].includes(user.role)) return;
+  const trip = await Trip.findById(alert.tripId).select("departmentId");
+  if (user.role === "DEPARTMENT_COORDINATOR" && trip && String(trip.departmentId) === String(user.departmentId)) return;
+  const error = new Error("You are not authorized to manage this incident.");
+  error.status = 403;
+  throw error;
 }
 
 export async function createFuel(req, res) {
@@ -101,70 +135,139 @@ export async function createMaintenance(req, res) {
 
 export async function raiseEmergency(req, res) {
   const driver = req.user.role === "DRIVER" ? await Driver.findOne({ userId: req.user._id }) : null;
-  if (driver && req.body.tripId) {
-    const trip = await Trip.findOne({ _id: req.body.tripId, driverId: driver._id });
-    if (!trip || (req.body.vehicleId && String(req.body.vehicleId) !== String(trip.vehicleId))) {
-      const error = new Error("Emergency trip or vehicle is not assigned to this driver.");
-      error.status = 403;
-      throw error;
-    }
+  const trip = await Trip.findById(req.body.tripId);
+  if (!trip) { const error = new Error("Trip not found."); error.status = 404; throw error; }
+  const allowed = ["TRANSPORT_ADMIN", "SUPER_ADMIN"].includes(req.user.role)
+    || (driver && String(trip.driverId) === String(driver._id))
+    || (req.user.role === "FACULTY_STAFF" && String(trip.facultyId) === String(req.user._id));
+  if (!allowed) { const error = new Error("You are not authorized to raise an emergency for this trip."); error.status = 403; throw error; }
+  if (!["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED", "TRANSFER_OR_VERIFICATION_PENDING"].includes(trip.status)) {
+    const error = new Error("Emergency alerts are available only for active or scheduled trips."); error.status = 409; throw error;
   }
+  if (req.body.idempotencyKey) {
+    const matchingRetry = await EmergencyAlert.findOne({
+      idempotencyKey: req.body.idempotencyKey,
+      reporterId: req.user._id,
+      kind: "EMERGENCY"
+    });
+    if (matchingRetry) return ok(res, "Emergency already reported", matchingRetry, 200);
+  }
+  const existing = await EmergencyAlert.findOne({ tripId: trip._id, reporterId: req.user._id, kind: "EMERGENCY", status: { $in: ["OPEN", "ACKNOWLEDGED"] } });
+  if (existing) return ok(res, "Emergency already reported", existing, 200);
+  const lastKnownLocation = await GpsLog.findOne({ tripId: trip._id }).sort({ timestamp: -1 }).lean();
   const alert = await EmergencyAlert.create({
-    ...req.body,
-    driverId: driver?._id || req.body.driverId,
-    alertId: humanId("EMG")
+    alertId: humanId("EMG"),
+    kind: "EMERGENCY",
+    tripId: trip._id,
+    requestId: trip.requestId,
+    vehicleId: trip.vehicleId,
+    driverId: trip.driverId,
+    reporterId: req.user._id,
+    reporterRole: req.user.role,
+    severity: req.body.severity || "HIGH",
+    message: req.body.message,
+    location: req.body.location,
+    lastKnownLocation,
+    idempotencyKey: req.body.idempotencyKey,
+    events: [{ action: "CREATED", actorId: req.user._id, note: req.body.message }]
   });
   req.app.get("io")?.to("admin-room").emit("emergency:new", alert);
-  return ok(res, "Emergency raised", alert, 201);
+  req.app.get("io")?.to(`coordinator-room-${trip.departmentId}`).emit("emergency:new", alert);
+  await notifyIncident(trip, alert, "Emergency alert", `Emergency reported for trip ${trip.tripId}.`, "EMERGENCY");
+  await notify(req.user._id, "Emergency alert sent", "The Transport Administrator and Department Coordinator have been notified.", "EMERGENCY", { incidentId: alert._id, tripId: trip._id });
+  return ok(res, "Emergency alert sent successfully. The Transport Administrator and Department Coordinator have been notified.", alert, 201);
 }
 
-export async function resolveEmergency(req, res) {
-  const alert = await EmergencyAlert.findByIdAndUpdate(
-    req.params.id,
-    { status: req.body.status || "RESOLVED", resolvedAt: new Date() },
-    { new: true }
-  );
+export async function acknowledgeEmergency(req, res) {
+  const alert = await EmergencyAlert.findById(req.params.id);
   if (!alert) {
     const error = new Error("Emergency alert not found");
     error.status = 404;
     throw error;
   }
+  await assertIncidentManager(alert, req.user);
+  if (alert.status === "RESOLVED") { const error = new Error("Resolved incidents cannot be acknowledged."); error.status = 409; throw error; }
+  alert.status = "ACKNOWLEDGED";
+  alert.acknowledgedBy = req.user._id;
+  alert.acknowledgedAt = new Date();
+  alert.events.push({ action: "ACKNOWLEDGED", actorId: req.user._id, note: req.body.note });
+  await alert.save();
   req.app.get("io")?.to("admin-room").emit("emergency:updated", alert);
-  return ok(res, "Emergency updated", alert);
+  const trip = await Trip.findById(alert.tripId).select("departmentId");
+  if (trip) req.app.get("io")?.to(`coordinator-room-${trip.departmentId}`).emit("emergency:updated", alert);
+  return ok(res, "Emergency acknowledged", alert);
+}
+
+export async function silenceEmergency(req, res) {
+  const alert = await EmergencyAlert.findById(req.params.id);
+  if (!alert) { const error = new Error("Emergency alert not found"); error.status = 404; throw error; }
+  await assertIncidentManager(alert, req.user);
+  if (!alert.silencedBy.some((entry) => String(entry.userId) === String(req.user._id))) {
+    alert.silencedBy.push({ userId: req.user._id });
+    alert.events.push({ action: "ALARM_SILENCED", actorId: req.user._id });
+    await alert.save();
+  }
+  return ok(res, "Alarm silenced for your session", alert);
+}
+
+export async function resolveEmergency(req, res) {
+  const alert = await EmergencyAlert.findById(req.params.id);
+  if (!alert) { const error = new Error("Emergency alert not found"); error.status = 404; throw error; }
+  await assertIncidentManager(alert, req.user);
+  alert.status = "RESOLVED";
+  alert.resolvedAt = new Date();
+  alert.resolvedBy = req.user._id;
+  alert.resolutionNotes = req.body.note;
+  alert.events.push({ action: "RESOLVED", actorId: req.user._id, note: req.body.note });
+  await alert.save();
+  req.app.get("io")?.to("admin-room").emit("emergency:updated", alert);
+  const trip = await Trip.findById(alert.tripId).select("departmentId");
+  if (trip) req.app.get("io")?.to(`coordinator-room-${trip.departmentId}`).emit("emergency:updated", alert);
+  return ok(res, "Emergency resolved", alert);
 }
 
 export async function breakdown(req, res) {
-  if (!req.body.vehicleId) {
-    const error = new Error("Vehicle is required for a breakdown report.");
-    error.status = 400;
-    throw error;
-  }
+  if (!req.body.tripId) { const error = new Error("Trip is required for a breakdown report."); error.status = 400; throw error; }
+  const trip = await Trip.findById(req.body.tripId);
+  if (!trip) { const error = new Error("Trip not found."); error.status = 404; throw error; }
   if (req.user.role === "DRIVER") {
     const driver = await Driver.findOne({ userId: req.user._id });
-    const trip = req.body.tripId ? await Trip.findOne({ _id: req.body.tripId, driverId: driver?._id }) : null;
-    if (!driver || !trip || String(trip.vehicleId) !== String(req.body.vehicleId)) {
+    if (!driver || String(trip.driverId) !== String(driver._id)) {
       const error = new Error("Drivers can only report breakdowns for their assigned vehicle and trip.");
       error.status = 403;
       throw error;
     }
   }
-  await Vehicle.findByIdAndUpdate(req.body.vehicleId, { status: "BREAKDOWN" });
-  if (req.body.driverId) await Driver.findByIdAndUpdate(req.body.driverId, { status: "AVAILABLE" });
-  const alert = await EmergencyAlert.create({ ...req.body, alertId: humanId("BRK"), status: "OPEN", message: req.body.message || "Vehicle breakdown reported" });
-  let alternatives = [];
-  if (req.body.tripId) {
-    const trip = await Trip.findByIdAndUpdate(req.body.tripId, { status: "VEHICLE_REASSIGNMENT_REQUIRED" }, { new: true });
-    if (trip) {
-      const request = await VehicleRequest.findById(trip.requestId);
-      if (request) {
-        alternatives = await runSmartAllocation(request);
-        await VehicleAllocation.updateMany(
-          { requestId: request._id, isSelected: false },
-          { reallocationForTripId: trip._id }
-        );
-      }
-    }
+  const existing = await EmergencyAlert.findOne({ tripId: trip._id, kind: "BREAKDOWN", status: { $in: ["OPEN", "ACKNOWLEDGED"] } });
+  if (existing) return ok(res, "Breakdown is already being handled", existing, 200);
+  const transitioned = await Trip.findOneAndUpdate(
+    { _id: trip._id, vehicleId: trip.vehicleId, status: { $in: ["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED"] } },
+    { status: "REPLACEMENT_SEARCHING", replacementStatus: "SEARCHING" },
+    { new: true }
+  );
+  if (!transitioned) { const error = new Error("Trip is not eligible for breakdown reallocation."); error.status = 409; throw error; }
+  const lastKnownLocation = await GpsLog.findOne({ tripId: trip._id }).sort({ timestamp: -1 }).lean();
+  const alert = await EmergencyAlert.create({
+    alertId: humanId("BRK"), kind: "BREAKDOWN", tripId: trip._id, requestId: trip.requestId, vehicleId: trip.vehicleId, driverId: trip.driverId,
+    reporterId: req.user._id, reporterRole: req.user.role, severity: req.body.severity || "HIGH", message: req.body.message || "Vehicle breakdown reported",
+    location: req.body.location, lastKnownLocation, events: [{ action: "BREAKDOWN_REPORTED", actorId: req.user._id, note: req.body.message }]
+  });
+  await Vehicle.findByIdAndUpdate(trip.vehicleId, { status: "BREAKDOWN_REPORTED" });
+  await Driver.findByIdAndUpdate(trip.driverId, { status: "AVAILABLE" });
+  const request = await VehicleRequest.findById(trip.requestId);
+  const alternatives = request ? await runSmartAllocation(request, { excludeVehicleIds: [trip.vehicleId] }) : [];
+  let replacement = null;
+  if (alternatives[0]) {
+    try { replacement = await reassignTrip({ tripId: trip._id, allocation: alternatives[0], actor: req.user }); }
+    catch (error) { if (error.status !== 409) throw error; }
   }
-  req.app.get("io")?.to("admin-room").emit("trip:reallocated", { alert, alternatives });
-  return ok(res, "Breakdown reported and replacement allocation generated", { alert, alternatives }, 201);
+  if (!replacement) {
+    await Trip.findByIdAndUpdate(trip._id, { status: "REPLACEMENT_UNAVAILABLE", replacementStatus: "UNAVAILABLE" });
+    alert.events.push({ action: "REPLACEMENT_UNAVAILABLE", actorId: req.user._id, note: "No eligible replacement could be reserved." });
+    await alert.save();
+  }
+  await notifyIncident(trip, alert, "Bus breakdown reported", replacement ? `Replacement assigned for trip ${trip.tripId}.` : `No replacement is currently available for trip ${trip.tripId}.`);
+  req.app.get("io")?.to("admin-room").emit("trip:reallocated", { alert, replacement, alternatives });
+  req.app.get("io")?.to(`coordinator-room-${trip.departmentId}`).emit("trip:reallocated", { alert, replacement, alternatives });
+  return ok(res, replacement ? "Breakdown reported and replacement assigned" : "Breakdown reported; no replacement is currently available", { alert, replacement, alternatives }, 201);
 }

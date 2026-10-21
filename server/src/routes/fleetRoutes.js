@@ -2,7 +2,6 @@ import { Router } from "express";
 import {
   Department,
   Driver,
-  SystemSetting,
   User,
   Vehicle,
   VehicleDocument
@@ -20,7 +19,6 @@ const vehicles = createCrudController(Vehicle, ["vehicleId", "registrationNumber
 const drivers = createCrudController(Driver, ["driverId", "licenseNumber"]);
 const departments = createCrudController(Department, ["code", "name"]);
 const users = createCrudController(User, ["name", "email", "role"]);
-const settings = createCrudController(SystemSetting, ["key"]);
 const docs = createCrudController(VehicleDocument, ["documentId", "type", "number"]);
 
 fleetRoutes.get("/vehicles", asyncHandler(vehicles.list));
@@ -40,10 +38,6 @@ fleetRoutes.patch("/departments/:id", requireRoles("TRANSPORT_ADMIN", "SUPER_ADM
 fleetRoutes.get("/users", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(users.list));
 fleetRoutes.post("/users", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(users.create));
 fleetRoutes.patch("/users/:id", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(users.update));
-
-fleetRoutes.get("/settings", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(settings.list));
-fleetRoutes.post("/settings", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(settings.create));
-fleetRoutes.patch("/settings/:id", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(settings.update));
 
 fleetRoutes.get("/vehicle-documents", asyncHandler(docs.list));
 fleetRoutes.post("/vehicle-documents", requireRoles("TRANSPORT_ADMIN", "SUPER_ADMIN"), asyncHandler(docs.create));

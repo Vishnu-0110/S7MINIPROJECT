@@ -1,10 +1,11 @@
-import { AlertTriangle, Plus } from "lucide-react";
+import { AlertTriangle, BellRing, CheckCircle2, Plus, Volume2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import DataTable from "../components/DataTable.jsx";
 import LoadingState from "../components/LoadingState.jsx";
 import { useApiResource } from "../hooks/useApiResource.js";
 import { api } from "../lib/api.js";
 import { useAuthStore } from "../store/authStore.js";
+import { connectSocket } from "../lib/socket.js";
 
 const configs = {
   maintenance: {
@@ -40,8 +41,16 @@ const configs = {
     title: "Emergency Center",
     columns: [
       { key: "alertId", label: "Alert" },
+      { key: "kind", label: "Type" },
+      { key: "severity", label: "Severity" },
       { key: "message", label: "Message" },
-      { key: "status", label: "Status" }
+      { key: "status", label: "Status" },
+      { key: "location", label: "Location", render: (row) => {
+        const location = row.location || row.lastKnownLocation;
+        return location?.latitude !== undefined && location?.longitude !== undefined
+          ? <a className="link link-primary" href={`https://www.google.com/maps?q=${location.latitude},${location.longitude}`} target="_blank" rel="noreferrer">Open map</a>
+          : "Location unavailable";
+      } }
     ],
     fields: ["tripId", "vehicleId", "driverId", "message"]
   }
@@ -55,7 +64,24 @@ export default function OperationsPage({ resource }) {
   const [optionsError, setOptionsError] = useState("");
   const [options, setOptions] = useState({ vehicles: [], trips: [], drivers: [] });
   const user = useAuthStore((state) => state.user);
-  const canAdd = resource !== "emergencies" || user?.role !== "DRIVER";
+  const canAdd = resource !== "emergencies";
+  const [alarmEnabled, setAlarmEnabled] = useState(false);
+
+  useEffect(() => {
+    if (resource !== "emergencies") return undefined;
+    const socket = connectSocket();
+    const onEmergency = () => {
+      setMessage("A new emergency alert needs attention.");
+      if (alarmEnabled) playAlarm();
+      reload();
+    };
+    socket.on("emergency:new", onEmergency);
+    socket.on("emergency:updated", reload);
+    return () => {
+      socket.off("emergency:new", onEmergency);
+      socket.off("emergency:updated", reload);
+    };
+  }, [alarmEnabled, reload, resource]);
 
   useEffect(() => {
     Promise.all([api.get("/vehicles"), api.get("/trips"), api.get("/drivers")])
@@ -85,6 +111,26 @@ export default function OperationsPage({ resource }) {
     }
   }
 
+  async function acknowledgeEmergency(id) {
+    try {
+      await api.post(`/emergencies/${id}/acknowledge`);
+      setMessage("Emergency acknowledged. The incident remains open until it is resolved.");
+      await reload();
+    } catch (err) {
+      setMessage(err.message);
+    }
+  }
+
+  async function silenceEmergency(id) {
+    try {
+      await api.post(`/emergencies/${id}/silence`);
+      setMessage("Alarm stopped for your session. The incident is still active.");
+      await reload();
+    } catch (err) {
+      setMessage(err.message);
+    }
+  }
+
   if (loading) return <LoadingState />;
 
   return (
@@ -98,7 +144,7 @@ export default function OperationsPage({ resource }) {
         {optionsError ? <div className="alert alert-warning">Some selection lists could not be loaded: {optionsError}</div> : null}
         <DataTable
           rows={data}
-          columns={resource === "emergencies" ? [...cfg.columns, { key: "action", label: "Action", render: (row) => row.status === "RESOLVED" || user?.role === "DRIVER" ? "-" : <button className="btn btn-success btn-xs" onClick={() => resolveEmergency(row._id)}>Resolve</button> }] : cfg.columns}
+          columns={resource === "emergencies" ? [...cfg.columns, { key: "action", label: "Action", render: (row) => row.status === "RESOLVED" || user?.role === "DRIVER" ? "-" : <div className="flex flex-wrap gap-2">{row.status === "OPEN" ? <button className="btn btn-warning btn-xs" onClick={() => acknowledgeEmergency(row._id)}><CheckCircle2 className="h-3 w-3" /> Acknowledge</button> : null}<button className="btn btn-outline btn-xs" onClick={() => silenceEmergency(row._id)}><Volume2 className="h-3 w-3" /> Stop alarm</button><button className="btn btn-success btn-xs" onClick={() => resolveEmergency(row._id)}>Resolve</button></div> }] : cfg.columns}
         />
       </div>
       {canAdd ? <aside className="rounded-lg border border-slate-200 bg-white p-5">
@@ -112,12 +158,29 @@ export default function OperationsPage({ resource }) {
           </button>
         </form>
       </aside>
-        : <aside className="rounded-lg border border-slate-200 bg-white p-5">
-        <h3 className="font-semibold">Need urgent help?</h3>
-        <p className="mt-2 text-sm text-slate-600">Use the Emergency action in your Driver Workspace. It automatically sends the active trip, vehicle, driver, and location details.</p>
+        : <aside className="rounded-lg border border-error/30 bg-error/5 p-5">
+        <BellRing className="h-6 w-6 text-error" />
+        <h3 className="mt-3 font-semibold">Emergency alerts</h3>
+        <p className="mt-2 text-sm text-slate-600">Acknowledge takes responsibility, Stop alarm only silences your browser, and Resolve closes the incident after it is handled.</p>
+        {user?.role !== "DRIVER" ? <button className={`btn mt-4 w-full ${alarmEnabled ? "btn-error" : "btn-outline"}`} onClick={() => setAlarmEnabled((enabled) => !enabled)}><Volume2 className="h-4 w-4" /> {alarmEnabled ? "Alarm enabled" : "Enable alarm"}</button> : null}
       </aside>}
     </section>
   );
+}
+
+function playAlarm() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const context = new AudioContext();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.frequency.value = 880;
+    gain.gain.setValueAtTime(0.12, context.currentTime);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.5);
+    oscillator.addEventListener("ended", () => context.close());
+  } catch {}
 }
 
 function OperationField({ field, form, setForm, options }) {
