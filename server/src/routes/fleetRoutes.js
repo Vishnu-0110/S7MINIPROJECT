@@ -61,12 +61,15 @@ async function createUser(req, res) {
 }
 
 async function createVehicleDocument(req, res) {
-  const { vehicleId, type, expiresAt } = req.body;
-  if (!vehicleId || !vehicleDocumentTypes.includes(type) || !expiresAt || Number.isNaN(new Date(expiresAt).getTime())) {
-    throw new ApiError("Choose a document type, vehicle, and valid expiry date", 400);
+  const { vehicleNumber, vehicleType, type, expiresAt } = req.body;
+  if (!vehicleNumber?.trim() || !vehicleType || !vehicleDocumentTypes.includes(type) || !expiresAt || Number.isNaN(new Date(expiresAt).getTime())) {
+    throw new ApiError("Choose a document type and vehicle type, enter a vehicle number, and provide a valid expiry date", 400);
   }
-  const vehicle = await Vehicle.findById(vehicleId);
-  if (!vehicle) throw new ApiError("Vehicle not found", 404);
+  const vehicle = await Vehicle.findOne({
+    registrationNumber: vehicleNumber.trim(),
+    type: vehicleType
+  });
+  if (!vehicle) throw new ApiError("No vehicle matches that number and vehicle type", 404);
   const document = await VehicleDocument.create({
     documentId: humanId("DOC"),
     vehicleId: vehicle._id,

@@ -71,8 +71,8 @@ const config = {
       { key: "vehicleId", label: "Vehicle Number", render: (row) => row.vehicleId?.registrationNumber || "—" },
       { key: "expiresAt", label: "Expiry Date", render: (row) => row.expiresAt ? new Date(row.expiresAt).toLocaleDateString() : "—" }
     ],
-    fields: ["type", "vehicleType", "vehicleId", "expiresAt"],
-    selects: { type: "documentTypes", vehicleType: "vehicleTypes", vehicleId: "vehicleNumbers" }
+    fields: ["type", "vehicleType", "vehicleNumber", "expiresAt"],
+    selects: { type: "documentTypes", vehicleType: "vehicleTypes" }
   }
 };
 
@@ -96,8 +96,6 @@ export default function ManagementPage({ resource }) {
     try {
       const payload = resource === "users"
         ? { ...form, role: selectedUserType }
-        : resource === "vehicle-documents"
-        ? { ...form, vehicleType: options.vehicles.find((vehicle) => vehicle._id === form.vehicleId)?.type }
         : resource === "vehicles" && typeof form.facilities === "string"
         ? { ...form, facilities: form.facilities.split(",").map((value) => value.trim()).filter(Boolean) }
         : form;
@@ -145,7 +143,7 @@ export default function ManagementPage({ resource }) {
 
 function ManagementField({ field, kind, form, setForm, options }) {
   const value = form[field] || "";
-  const update = (event) => setForm((current) => ({ ...current, [field]: event.target.value, ...(field === "vehicleType" ? { vehicleId: "" } : {}) }));
+  const update = (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
   const choices = {
     vehicles: options.vehicles.map((item) => ({ value: item._id, label: `${item.vehicleId} — ${item.registrationNumber}` })),
     departments: options.departments.map((item) => ({ value: item._id, label: `${item.code} — ${item.name}` })),
@@ -157,16 +155,15 @@ function ManagementField({ field, kind, form, setForm, options }) {
       { value: "FC", label: "FC" },
       { value: "POLLUTION_CERTIFICATE", label: "Pollution Certificate" }
     ],
-    vehicleTypes: [...new Set(options.vehicles.map((item) => item.type).filter(Boolean))].map((item) => ({ value: item, label: item })),
-    vehicleNumbers: options.vehicles.filter((item) => !form.vehicleType || item.type === form.vehicleType).map((item) => ({ value: item._id, label: `${item.registrationNumber} (${item.vehicleId})` }))
+    vehicleTypes: [...new Set(["Bus", "Van", ...options.vehicles.map((item) => item.type).filter(Boolean)])].map((item) => ({ value: item, label: item }))
   };
   if (kind) {
-    const label = field === "type" ? "Document type" : field === "vehicleType" ? "Vehicle type" : field === "vehicleId" ? "Vehicle number" : field;
-    return <label className="form-control w-full"><span className="label-text mb-1 capitalize">{label}</span><select className="select select-bordered w-full" value={value} onChange={update} required={["type", "vehicleType", "vehicleId"].includes(field)}><option value="">Select {label.toLowerCase()}</option>{choices[kind].map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>;
+    const label = field === "type" ? "Document type" : field === "vehicleType" ? "Vehicle type" : field;
+    return <label className="form-control w-full"><span className="label-text mb-1 capitalize">{label}</span><select className="select select-bordered w-full" value={value} onChange={update} required={["type", "vehicleType"].includes(field)}><option value="">Select {label.toLowerCase()}</option>{choices[kind].map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>;
   }
   const type = ["capacity", "fuelLevel", "mileageKmPerLiter", "currentKM"].includes(field) ? "number" : field === "expiresAt" ? "date" : "text";
   if (field === "password") return <label className="form-control w-full"><span className="label-text mb-1 capitalize">Password</span><PasswordField className="input input-bordered w-full" placeholder={field} value={value} onChange={update} required /></label>;
   const inputType = field === "email" ? "email" : type;
-  const label = field === "expiresAt" ? "Expiry date" : field;
-  return <label className="form-control w-full"><span className="label-text mb-1 capitalize">{label}</span><input className="input input-bordered w-full" type={inputType} min={type === "number" ? "0" : undefined} placeholder={field === "facilities" ? "facilities, separated by commas" : field} value={value} onChange={update} required={field === "name" || field === "email" || field === "licenseNumber" || field === "expiresAt"} /></label>;
+  const label = field === "expiresAt" ? "Expiry date" : field === "vehicleNumber" ? "Vehicle number" : field;
+  return <label className="form-control w-full"><span className="label-text mb-1 capitalize">{label}</span><input className="input input-bordered w-full" type={inputType} min={type === "number" ? "0" : undefined} placeholder={field === "facilities" ? "facilities, separated by commas" : field === "vehicleNumber" ? "Enter registration number" : field} value={value} onChange={update} required={field === "name" || field === "email" || field === "licenseNumber" || field === "expiresAt" || field === "vehicleNumber"} /></label>;
 }
