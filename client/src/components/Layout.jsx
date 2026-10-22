@@ -72,10 +72,10 @@ export default function Layout() {
   }, [menuOpen]);
 
   return (
-    <div className="min-h-screen">
-      <div className="drawer lg:drawer-open">
+    <div className="app-shell">
+      <div className="drawer h-full min-h-0 overflow-hidden lg:drawer-open">
         <input id="main-drawer" type="checkbox" className="drawer-toggle" checked={menuOpen} onChange={(event) => setMenuOpen(event.target.checked)} />
-        <div className="drawer-content min-w-0">
+        <div className="drawer-content h-full min-h-0 min-w-0 overflow-y-auto overscroll-contain">
           <header className="sticky top-0 z-20 flex min-h-[72px] items-center justify-between border-b border-slate-200/70 bg-white/80 px-4 py-2 backdrop-blur-xl lg:px-8">
             <label htmlFor="main-drawer" className="btn btn-square btn-ghost rounded-xl lg:hidden" aria-label="Open menu" aria-expanded={menuOpen}>
               <Bus className="h-5 w-5" />
@@ -100,9 +100,9 @@ export default function Layout() {
             <Outlet />
           </main>
         </div>
-        <div className="drawer-side z-30">
+        <div className="drawer-side z-30 h-dvh overscroll-contain lg:min-h-0">
           <label htmlFor="main-drawer" aria-label="Close menu" className="drawer-overlay" onClick={() => setMenuOpen(false)} />
-          <aside className="min-h-full w-[min(18rem,calc(100vw-1rem))] bg-slate-950 p-4 text-slate-300">
+          <aside className="flex h-full min-h-0 w-[min(18rem,calc(100vw-1rem))] flex-col bg-slate-950 p-4 text-slate-300">
             <div className="mb-8 flex items-center justify-between gap-3 px-2 pt-2">
               <div className="flex min-w-0 items-center gap-3">
               <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 to-primary text-white shadow-lg shadow-primary/30">
@@ -119,7 +119,7 @@ export default function Layout() {
               </button>
             </div>
             <div className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Main menu</div>
-            <nav className="max-h-[calc(100vh-140px)] space-y-1 overflow-y-auto pr-1">
+            <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1">
               <NavigationItems items={mainNav} onNavigate={() => setMenuOpen(false)} />
               {managementNav.length ? <NavigationGroup title="Manage fleet" items={managementNav} isActive={groupIsActive(managementNav)} onNavigate={() => setMenuOpen(false)} /> : null}
               {moreNav.length ? <NavigationGroup title="More tools" items={moreNav} isActive={groupIsActive(moreNav)} onNavigate={() => setMenuOpen(false)} /> : null}

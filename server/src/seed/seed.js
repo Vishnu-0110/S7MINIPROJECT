@@ -62,7 +62,7 @@ async function seed() {
   );
 
   const transportAdmin = await upsertUser({ name: "Transport Admin", email: "transportadmin@bit.edu.in", role: "TRANSPORT_ADMIN", departmentId: transport._id });
-  const coordinator = await upsertUser({ name: "CSE Coordinator", email: "coordinator@bit.edu.in", role: "DEPARTMENT_COORDINATOR", departmentId: cse._id });
+  const coordinator = await upsertUser({ name: "Department Coordinator", email: "coordinator@bit.edu.in", role: "DEPARTMENT_COORDINATOR", departmentId: cse._id });
   const faculty = await upsertUser({ name: "Faculty User", email: "faculty@bit.edu.in", role: "FACULTY_STAFF", departmentId: cse._id });
   const driverUser = await upsertUser({ name: "Kumar Driver", email: "driver@bit.edu.in", role: "DRIVER", departmentId: transport._id, phone: "9999999999" });
 
