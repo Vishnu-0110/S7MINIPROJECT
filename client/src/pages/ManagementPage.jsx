@@ -64,16 +64,15 @@ const config = {
   },
   "vehicle-documents": {
     title: "Vehicle Documents",
-    defaults: { status: "VALID" },
+    defaults: {},
     columns: [
-      { key: "documentId", label: "Document" },
-      { key: "vehicleId", label: "Vehicle" },
-      { key: "type", label: "Type" },
-      { key: "expiresAt", label: "Expires" },
-      { key: "status", label: "Status" }
+      { key: "type", label: "Document Type" },
+      { key: "vehicleType", label: "Vehicle Type" },
+      { key: "vehicleId", label: "Vehicle Number", render: (row) => row.vehicleId?.registrationNumber || "—" },
+      { key: "expiresAt", label: "Expiry Date", render: (row) => row.expiresAt ? new Date(row.expiresAt).toLocaleDateString() : "—" }
     ],
-    fields: ["documentId", "vehicleId", "type", "number", "expiresAt", "status"],
-    selects: { vehicleId: "vehicles", status: "documentStatus" }
+    fields: ["type", "vehicleType", "vehicleId", "expiresAt"],
+    selects: { type: "documentTypes", vehicleType: "vehicleTypes", vehicleId: "vehicleNumbers" }
   }
 };
 
@@ -97,6 +96,8 @@ export default function ManagementPage({ resource }) {
     try {
       const payload = resource === "users"
         ? { ...form, role: selectedUserType }
+        : resource === "vehicle-documents"
+        ? { ...form, vehicleType: options.vehicles.find((vehicle) => vehicle._id === form.vehicleId)?.type }
         : resource === "vehicles" && typeof form.facilities === "string"
         ? { ...form, facilities: form.facilities.split(",").map((value) => value.trim()).filter(Boolean) }
         : form;
@@ -128,9 +129,9 @@ export default function ManagementPage({ resource }) {
         </> : <DataTable rows={data} columns={cfg.columns} />}
       </div>
       <aside className="rounded-lg border border-slate-200 bg-white p-5">
-        <h3 className="font-semibold">{resource === "users" ? `Add ${userTypes.find((type) => type.role === selectedUserType)?.label}` : `Add ${resource.slice(0, -1)}`}</h3>
+        <h3 className="font-semibold">{resource === "users" ? `Add ${userTypes.find((type) => type.role === selectedUserType)?.label}` : resource === "vehicle-documents" ? "Add vehicle document" : `Add ${resource.slice(0, -1)}`}</h3>
         <form className="mt-4 space-y-3" onSubmit={submit}>
-          {[...cfg.fields, ...(resource === "users" && selectedUserType === "DRIVER" ? ["licenseNumber"] : [])].map((field) => <ManagementField key={field} field={field} kind={resource === "users" && field === "department" ? "userDepartments" : cfg.selects?.[field]} form={form} setForm={setForm} options={options} />)}
+          {[...cfg.fields, ...(resource === "users" && selectedUserType === "DRIVER" ? ["licenseNumber"] : [])].map((field) => <ManagementField key={field} field={field} kind={cfg.selects?.[field]} form={form} setForm={setForm} options={options} />)}
           {message ? <p className="text-sm text-slate-500">{message}</p> : null}
           <button className="btn btn-primary w-full">
             <Plus className="h-4 w-4" />
@@ -144,20 +145,28 @@ export default function ManagementPage({ resource }) {
 
 function ManagementField({ field, kind, form, setForm, options }) {
   const value = form[field] || "";
-  const update = (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
+  const update = (event) => setForm((current) => ({ ...current, [field]: event.target.value, ...(field === "vehicleType" ? { vehicleId: "" } : {}) }));
   const choices = {
     vehicles: options.vehicles.map((item) => ({ value: item._id, label: `${item.vehicleId} — ${item.registrationNumber}` })),
     departments: options.departments.map((item) => ({ value: item._id, label: `${item.code} — ${item.name}` })),
-    userDepartments: userDepartments.map((code) => ({ value: code, label: code })),
     drivers: options.users.filter((item) => item.role === "DRIVER").map((item) => ({ value: item._id, label: `${item.name} (${item.email})` })),
     coordinators: options.users.filter((item) => item.role === "DEPARTMENT_COORDINATOR").map((item) => ({ value: item._id, label: `${item.name} (${item.email})` })),
-    documentStatus: ["VALID", "EXPIRING", "EXPIRED"].map((item) => ({ value: item, label: item }))
+    documentTypes: [
+      { value: "RC", label: "RC" },
+      { value: "INSURANCE", label: "Insurance" },
+      { value: "FC", label: "FC" },
+      { value: "POLLUTION_CERTIFICATE", label: "Pollution Certificate" }
+    ],
+    vehicleTypes: [...new Set(options.vehicles.map((item) => item.type).filter(Boolean))].map((item) => ({ value: item, label: item })),
+    vehicleNumbers: options.vehicles.filter((item) => !form.vehicleType || item.type === form.vehicleType).map((item) => ({ value: item._id, label: `${item.registrationNumber} (${item.vehicleId})` }))
   };
   if (kind) {
-    return <label className="form-control w-full"><span className="label-text mb-1 capitalize">{field === "userDepartments" ? "Department" : field}</span><select className="select select-bordered w-full" value={value} onChange={update}><option value="">Select {field === "userDepartments" ? "department" : field}</option>{choices[kind].map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>;
+    const label = field === "type" ? "Document type" : field === "vehicleType" ? "Vehicle type" : field === "vehicleId" ? "Vehicle number" : field;
+    return <label className="form-control w-full"><span className="label-text mb-1 capitalize">{label}</span><select className="select select-bordered w-full" value={value} onChange={update} required={["type", "vehicleType", "vehicleId"].includes(field)}><option value="">Select {label.toLowerCase()}</option>{choices[kind].map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>;
   }
   const type = ["capacity", "fuelLevel", "mileageKmPerLiter", "currentKM"].includes(field) ? "number" : field === "expiresAt" ? "date" : "text";
   if (field === "password") return <label className="form-control w-full"><span className="label-text mb-1 capitalize">Password</span><PasswordField className="input input-bordered w-full" placeholder={field} value={value} onChange={update} required /></label>;
   const inputType = field === "email" ? "email" : type;
-  return <label className="form-control w-full"><span className="label-text mb-1 capitalize">{field}</span><input className="input input-bordered w-full" type={inputType} min={type === "number" ? "0" : undefined} placeholder={field === "facilities" ? "facilities, separated by commas" : field} value={value} onChange={update} required={field === "name" || field === "email" || field === "licenseNumber"} /></label>;
+  const label = field === "expiresAt" ? "Expiry date" : field;
+  return <label className="form-control w-full"><span className="label-text mb-1 capitalize">{label}</span><input className="input input-bordered w-full" type={inputType} min={type === "number" ? "0" : undefined} placeholder={field === "facilities" ? "facilities, separated by commas" : field} value={value} onChange={update} required={field === "name" || field === "email" || field === "licenseNumber" || field === "expiresAt"} /></label>;
 }

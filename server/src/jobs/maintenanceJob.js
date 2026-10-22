@@ -1,19 +1,16 @@
 import cron from "node-cron";
-import { Maintenance, Notification, User, VehicleDocument } from "../models/index.js";
+import { Maintenance, Notification, User } from "../models/index.js";
 import { sendTodayTripReminders } from "../services/tripReminderService.js";
 
 export function startJobs() {
   const runDailyJobs = async () => {
-    const soon = new Date();
-    soon.setDate(soon.getDate() + 30);
-    await VehicleDocument.updateMany({ expiresAt: { $lte: soon }, status: "VALID" }, { status: "EXPIRING" });
     await Maintenance.updateMany({ serviceDate: { $lt: new Date() }, status: "SCHEDULED" }, { status: "OVERDUE", risk: "HIGH" });
     const admins = await User.find({ role: "TRANSPORT_ADMIN" }).select("_id");
     await Notification.insertMany(
       admins.map((admin) => ({
         userId: admin._id,
         title: "Fleet alerts updated",
-        message: "Maintenance and document risk checks completed.",
+        message: "Maintenance overdue checks completed. Expired vehicle documents are listed in Maintenance.",
         type: "MAINTENANCE"
       }))
     );

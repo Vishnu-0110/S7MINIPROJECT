@@ -11,10 +11,11 @@ const configs = {
   maintenance: {
     title: "Maintenance",
     columns: [
-      { key: "vehicleId", label: "Vehicle" },
+      { key: "vehicleId", label: "Vehicle", render: (row) => row.vehicleId?.registrationNumber || row.vehicleId?.vehicleId || row.vehicleId || "—" },
       { key: "type", label: "Type" },
       { key: "risk", label: "Risk" },
-      { key: "status", label: "Status" }
+      { key: "status", label: "Status" },
+      { key: "expiresAt", label: "Expiry Date", render: (row) => row.expiresAt ? new Date(row.expiresAt).toLocaleDateString() : "—" }
     ],
     fields: ["vehicleId", "type", "currentKM", "nextServiceKM", "notes"]
   },
@@ -58,7 +59,7 @@ const configs = {
 
 export default function OperationsPage({ resource }) {
   const cfg = configs[resource];
-  const { data, loading, error, reload } = useApiResource(`/${resource}`);
+  const { data, loading, error, reload } = useApiResource(resource === "maintenance" ? "/maintenance?limit=100" : `/${resource}`);
   const [form, setForm] = useState({});
   const [message, setMessage] = useState("");
   const [optionsError, setOptionsError] = useState("");
@@ -84,10 +85,16 @@ export default function OperationsPage({ resource }) {
   }, [alarmEnabled, reload, resource]);
 
   useEffect(() => {
-    Promise.all([api.get("/vehicles"), api.get("/trips"), api.get("/drivers")])
+    Promise.all([api.get("/vehicles?limit=100"), api.get("/trips?limit=100"), api.get("/drivers?limit=100")])
       .then(([vehicles, trips, drivers]) => setOptions({ vehicles: vehicles.data || [], trips: trips.data || [], drivers: drivers.data || [] }))
       .catch((err) => setOptionsError(err.message || "Could not load form options."));
   }, []);
+
+  useEffect(() => {
+    if (resource !== "maintenance") return undefined;
+    const timer = window.setInterval(reload, 60_000);
+    return () => window.clearInterval(timer);
+  }, [reload, resource]);
 
   async function submit(event) {
     event.preventDefault();

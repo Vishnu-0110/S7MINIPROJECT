@@ -1,4 +1,4 @@
-import { EmergencyAlert, Expense, FuelLog, GpsLog, Maintenance, Notification, Vehicle, Driver, Trip, VehicleRequest, User } from "../models/index.js";
+import { EmergencyAlert, Expense, FuelLog, GpsLog, Maintenance, Notification, Vehicle, VehicleDocument, Driver, Trip, VehicleRequest, User } from "../models/index.js";
 import { ok } from "../utils/apiResponse.js";
 import { humanId } from "../utils/id.js";
 import { parsePagination, paginationPayload } from "../utils/pagination.js";
@@ -21,7 +21,35 @@ function listFor(Model, baseQuery = {}) {
   };
 }
 
-export const listMaintenance = listFor(Maintenance);
+export async function listMaintenance(req, res) {
+  const { page, limit, skip } = parsePagination(req.query);
+  const now = new Date();
+  const [maintenance, expiredDocuments] = await Promise.all([
+    Maintenance.find().populate("vehicleId", "vehicleId registrationNumber type").sort({ createdAt: -1 }).lean(),
+    VehicleDocument.find({ expiresAt: { $lte: now } })
+      .populate("vehicleId", "vehicleId registrationNumber type")
+      .lean()
+  ]);
+  const expiredItems = expiredDocuments.map((document) => ({
+    _id: `expired-${document._id}`,
+    maintenanceId: document.documentId,
+    vehicleId: document.vehicleId,
+    type: `${document.type?.replaceAll("_", " ") || "Vehicle document"} expired`,
+    risk: "HIGH",
+    status: "OVERDUE",
+    serviceDate: document.expiresAt,
+    expiresAt: document.expiresAt,
+    createdAt: document.expiresAt,
+    source: "DOCUMENT_EXPIRY"
+  }));
+  const rows = [...maintenance, ...expiredItems].sort((a, b) => {
+    if (a.source === "DOCUMENT_EXPIRY" && b.source !== "DOCUMENT_EXPIRY") return -1;
+    if (b.source === "DOCUMENT_EXPIRY" && a.source !== "DOCUMENT_EXPIRY") return 1;
+    return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+  });
+  const data = rows.slice(skip, skip + limit);
+  return ok(res, "List", data, 200, { pagination: paginationPayload(page, limit, rows.length) });
+}
 export const listFuel = async (req, res) => {
   if (req.user.role === "DRIVER") return listFor(FuelLog, { enteredBy: req.user._id })(req, res);
   return listFor(FuelLog)(req, res);

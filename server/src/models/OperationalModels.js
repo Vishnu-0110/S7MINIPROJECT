@@ -131,11 +131,11 @@ const vehicleDocumentSchema = new mongoose.Schema(
   {
     documentId: { type: String, required: true, unique: true },
     vehicleId: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle", required: true },
+    vehicleType: String,
     type: String,
     number: String,
     expiresAt: Date,
-    file: fileField,
-    status: { type: String, enum: ["VALID", "EXPIRING", "EXPIRED"], default: "VALID" }
+    file: fileField
   },
   { timestamps: true, collection: "vehicle_documents" }
 );
