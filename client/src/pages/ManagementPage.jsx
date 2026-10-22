@@ -95,7 +95,7 @@ export default function ManagementPage({ resource }) {
     event.preventDefault();
     try {
       const payload = resource === "users"
-        ? { ...form, role: selectedUserType }
+        ? { ...form, role: selectedUserType, ...(selectedUserType === "DRIVER" ? { department: undefined, departmentId: undefined } : {}) }
         : resource === "vehicles" && typeof form.facilities === "string"
         ? { ...form, facilities: form.facilities.split(",").map((value) => value.trim()).filter(Boolean) }
         : form;
@@ -129,7 +129,7 @@ export default function ManagementPage({ resource }) {
       <aside className="rounded-lg border border-slate-200 bg-white p-5">
         <h3 className="font-semibold">{resource === "users" ? `Add ${userTypes.find((type) => type.role === selectedUserType)?.label}` : resource === "vehicle-documents" ? "Add vehicle document" : `Add ${resource.slice(0, -1)}`}</h3>
         <form className="mt-4 space-y-3" onSubmit={submit}>
-          {[...cfg.fields, ...(resource === "users" && selectedUserType === "DRIVER" ? ["licenseNumber"] : [])].map((field) => <ManagementField key={field} field={field} kind={cfg.selects?.[field]} form={form} setForm={setForm} options={options} />)}
+          {[...cfg.fields.filter((field) => !(resource === "users" && selectedUserType === "DRIVER" && field === "department")), ...(resource === "users" && selectedUserType === "DRIVER" ? ["licenseNumber"] : [])].map((field) => <ManagementField key={field} field={field} kind={resource === "users" && field === "department" ? "userDepartments" : cfg.selects?.[field]} form={form} setForm={setForm} options={options} />)}
           {message ? <p className="text-sm text-slate-500">{message}</p> : null}
           <button className="btn btn-primary w-full">
             <Plus className="h-4 w-4" />
@@ -147,6 +147,7 @@ function ManagementField({ field, kind, form, setForm, options }) {
   const choices = {
     vehicles: options.vehicles.map((item) => ({ value: item._id, label: `${item.vehicleId} — ${item.registrationNumber}` })),
     departments: options.departments.map((item) => ({ value: item._id, label: `${item.code} — ${item.name}` })),
+    userDepartments: userDepartments.map((code) => ({ value: code, label: code })),
     drivers: options.users.filter((item) => item.role === "DRIVER").map((item) => ({ value: item._id, label: `${item.name} (${item.email})` })),
     coordinators: options.users.filter((item) => item.role === "DEPARTMENT_COORDINATOR").map((item) => ({ value: item._id, label: `${item.name} (${item.email})` })),
     documentTypes: [
