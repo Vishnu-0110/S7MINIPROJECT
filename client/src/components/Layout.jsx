@@ -38,7 +38,6 @@ const nav = [
   { to: "/emergencies", label: "Emergency Alerts", icon: ShieldAlert, group: "more", roles: ["DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"] },
   { to: "/vehicle-documents", label: "Vehicle Documents", icon: FileText, group: "more", roles: ["TRANSPORT_ADMIN"] },
   { to: "/users", label: "Users", icon: Users, group: "more", roles: ["TRANSPORT_ADMIN"] },
-  { to: "/departments", label: "Departments", icon: Users, group: "more", roles: ["TRANSPORT_ADMIN"] },
   { to: "/ai", label: "Help Assistant", icon: Bot, group: "more" },
 ];
 

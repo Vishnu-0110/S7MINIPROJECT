@@ -13,6 +13,8 @@ const userTypes = [
   { role: "TRANSPORT_ADMIN", label: "Transport Admin" }
 ];
 
+const userDepartments = ["CSE", "ECE", "EEE", "CSD", "AIDS", "AIML", "ISE"];
+
 const config = {
   vehicles: {
     title: "Vehicle Management",
@@ -40,14 +42,14 @@ const config = {
   },
   users: {
     title: "User Management",
-    defaults: { role: "FACULTY_STAFF", password: "SmartFleet@123" },
+    defaults: { role: "FACULTY_STAFF", password: "SmartFleet@123", department: "" },
     columns: [
       { key: "name", label: "Name" },
       { key: "email", label: "Email" },
-      { key: "role", label: "Role", render: (row) => row.role?.replaceAll("_", " ") },
+      { key: "departmentId", label: "Department", render: (row) => row.departmentId?.code || "—" },
       { key: "isActive", label: "Active", render: (row) => (row.isActive ? "Yes" : "No") }
     ],
-    fields: ["name", "email", "password", "phone"]
+    fields: ["name", "email", "password", "department", "phone"]
   },
   departments: {
     title: "Department Management",
@@ -128,7 +130,7 @@ export default function ManagementPage({ resource }) {
       <aside className="rounded-lg border border-slate-200 bg-white p-5">
         <h3 className="font-semibold">{resource === "users" ? `Add ${userTypes.find((type) => type.role === selectedUserType)?.label}` : `Add ${resource.slice(0, -1)}`}</h3>
         <form className="mt-4 space-y-3" onSubmit={submit}>
-          {[...cfg.fields, ...(resource === "users" && selectedUserType === "DRIVER" ? ["licenseNumber"] : [])].map((field) => <ManagementField key={field} field={field} kind={cfg.selects?.[field]} form={form} setForm={setForm} options={options} />)}
+          {[...cfg.fields, ...(resource === "users" && selectedUserType === "DRIVER" ? ["licenseNumber"] : [])].map((field) => <ManagementField key={field} field={field} kind={resource === "users" && field === "department" ? "userDepartments" : cfg.selects?.[field]} form={form} setForm={setForm} options={options} />)}
           {message ? <p className="text-sm text-slate-500">{message}</p> : null}
           <button className="btn btn-primary w-full">
             <Plus className="h-4 w-4" />
@@ -146,6 +148,7 @@ function ManagementField({ field, kind, form, setForm, options }) {
   const choices = {
     vehicles: options.vehicles.map((item) => ({ value: item._id, label: `${item.vehicleId} — ${item.registrationNumber}` })),
     departments: options.departments.map((item) => ({ value: item._id, label: `${item.code} — ${item.name}` })),
+    userDepartments: userDepartments.map((code) => ({ value: code, label: code })),
     drivers: options.users.filter((item) => item.role === "DRIVER").map((item) => ({ value: item._id, label: `${item.name} (${item.email})` })),
     coordinators: options.users.filter((item) => item.role === "DEPARTMENT_COORDINATOR").map((item) => ({ value: item._id, label: `${item.name} (${item.email})` })),
     documentStatus: ["VALID", "EXPIRING", "EXPIRED"].map((item) => ({ value: item, label: item }))
