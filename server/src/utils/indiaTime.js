@@ -1,5 +1,15 @@
 const timeZone = "Asia/Kolkata";
 
+// HTML date/time controls do not include an offset. Interpret their bare values
+// as India time so a server running in UTC cannot move the requested calendar day.
+export function parseIndiaDate(value) {
+  if (value instanceof Date || typeof value !== "string") return value;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(`${value}T00:00:00+05:30`);
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return new Date(`${value}:00+05:30`);
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(value)) return new Date(`${value}+05:30`);
+  return new Date(value);
+}
+
 function partsFor(date) {
   return Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {

@@ -66,6 +66,9 @@ async function createUser(req, res) {
   }
 
   const user = await User.create(userFields);
+  if (user.role === "DEPARTMENT_COORDINATOR" && user.departmentId) {
+    await Department.findByIdAndUpdate(user.departmentId, { coordinatorId: user._id });
+  }
   if (user.role === "DRIVER") {
     await Driver.create({
       driverId: humanId("DRV"),

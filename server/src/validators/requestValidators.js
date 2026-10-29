@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { PRIORITIES, TRIP_TYPES } from "../models/index.js";
+import { parseIndiaDate } from "../utils/indiaTime.js";
+
+const indiaDate = z.preprocess(parseIndiaDate, z.date());
 
 const requestBodySchema = z.object({
     tripType: z.enum(TRIP_TYPES),
@@ -9,9 +12,9 @@ const requestBodySchema = z.object({
     waypoints: z.array(z.string()).optional().default([]),
     passengerCount: z.coerce.number().int().positive(),
     passengers: z.array(z.object({ name: z.string().optional(), rollNo: z.string().optional(), phone: z.string().optional() })).optional(),
-    date: z.coerce.date(),
-    departureTime: z.coerce.date(),
-    returnTime: z.coerce.date(),
+    date: indiaDate,
+    departureTime: indiaDate,
+    returnTime: indiaDate,
     priority: z.enum(PRIORITIES).default("Normal"),
     specialRequirements: z.string().optional(),
     requiredFacilities: z.array(z.string().trim().min(1)).optional().default([]),
@@ -50,9 +53,9 @@ export const requestUpdateSchema = z.object({
     waypoints: z.array(z.string()).optional(),
     passengerCount: z.coerce.number().int().positive().optional(),
     passengers: z.array(z.object({ name: z.string().optional(), rollNo: z.string().optional(), phone: z.string().optional() })).optional(),
-    date: z.coerce.date().optional(),
-    departureTime: z.coerce.date().optional(),
-    returnTime: z.coerce.date().optional(),
+    date: indiaDate.optional(),
+    departureTime: indiaDate.optional(),
+    returnTime: indiaDate.optional(),
     priority: z.enum(PRIORITIES).optional(),
     specialRequirements: z.string().optional(),
     requiredFacilities: z.array(z.string().trim().min(1)).optional(),

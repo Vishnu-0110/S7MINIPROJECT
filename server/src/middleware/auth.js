@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
-import { User } from "../models/index.js";
+import { Department, User } from "../models/index.js";
 import { ApiError } from "../utils/apiResponse.js";
 
 export async function requireAuth(req, _res, next) {
@@ -12,6 +12,17 @@ export async function requireAuth(req, _res, next) {
     const payload = jwt.verify(token, env.jwtSecret || "development-only-secret");
     const user = await User.findById(payload.id).select("-password");
     if (!user || !user.isActive) throw new ApiError("Unauthorized", 401);
+
+    // Older coordinator accounts may have been linked only from Department.
+    // Repair that relationship before applying department-scoped authorization.
+    if (user.role === "DEPARTMENT_COORDINATOR" && !user.departmentId) {
+      const department = await Department.findOne({ coordinatorId: user._id })
+        || await Department.findOne({ code: "CSE" });
+      if (department) {
+        user.departmentId = department._id;
+        await user.save();
+      }
+    }
 
     req.user = user;
     next();

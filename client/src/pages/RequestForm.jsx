@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { api } from "../lib/api.js";
+import { indiaDateInputValue, indiaDateTimeToIso } from "../lib/dateTime.js";
 
 const schema = z.object({
   tripType: z.string().min(1),
@@ -57,13 +58,14 @@ export default function RequestForm() {
       const date = new Date();
       const daysUntilMonday = (8 - date.getDay()) % 7 || 7;
       date.setDate(date.getDate() + daysUntilMonday);
-      setValue("date", date.toISOString().slice(0, 10));
+      setValue("date", indiaDateInputValue(date));
     }
   }
 
   async function onSubmit(values) {
     try {
-      const departure = new Date(`${values.date}T${values.departureTime}`);
+      const departureIso = indiaDateTimeToIso(values.date, values.departureTime);
+      const departure = new Date(departureIso);
       if (departure <= new Date()) {
         setError("root", { message: "Departure time must be in the future." });
         return;
@@ -71,8 +73,8 @@ export default function RequestForm() {
       const returning = new Date(departure.getTime() + 8 * 60 * 60 * 1000);
       const payload = {
         ...values,
-        date: values.date,
-        departureTime: `${values.date}T${values.departureTime}`,
+        date: `${values.date}T00:00:00+05:30`,
+        departureTime: departureIso,
         returnTime: returning.toISOString(),
         waypoints: [],
         passengers: []
