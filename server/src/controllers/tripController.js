@@ -92,7 +92,8 @@ export async function tripQr(req, res) {
   if (req.user.role === "DRIVER") {
     throw new ApiError("The faculty member must display the trip QR code for the driver to scan.", 403);
   }
-  if (!isTodayInIndia(trip.scheduledStartTime)) {
+  const isReplacementVerification = ["TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip.status);
+  if (!isReplacementVerification && !isTodayInIndia(trip.scheduledStartTime)) {
     throw new ApiError("The trip QR code is available on the scheduled trip date.", 403);
   }
   const payload = { qr: await generateTripQr(req.params.id) };

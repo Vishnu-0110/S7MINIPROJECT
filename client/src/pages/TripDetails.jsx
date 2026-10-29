@@ -16,6 +16,7 @@ export default function TripDetails() {
   const [completionQr, setCompletionQr] = useState("");
   const [completionToken, setCompletionToken] = useState("");
   const [completionScanOpen, setCompletionScanOpen] = useState(false);
+  const [completionBusy, setCompletionBusy] = useState(false);
   const [token, setToken] = useState("");
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ startKM: "", endKM: "", rating: "", feedback: "" });
@@ -182,12 +183,18 @@ export default function TripDetails() {
   async function confirmCompletion() {
     if (!completionToken) return setMessage("Scan the driver’s completion QR code before confirming the trip.");
     if (!form.rating) return setMessage("Select a star rating before confirming the trip.");
+    if (completionBusy) return;
+    setCompletionBusy(true);
     try {
       await api.post(`/trips/${id}/complete`, { qrToken: completionToken, rating: Number(form.rating), feedback: form.feedback || undefined });
       setMessage("Thank you. The trip is completed and your rating has been recorded.");
+      setCompletionToken("");
+      setCompletionScanOpen(false);
       await load();
     } catch (error) {
       setMessage(error.message);
+    } finally {
+      setCompletionBusy(false);
     }
   }
 
@@ -335,7 +342,7 @@ export default function TripDetails() {
               {completionToken ? <p className="text-sm font-medium text-success">Completion QR scanned successfully.</p> : null}
               <label className="form-control"><span className="label-text">Star rating</span><select className="select select-bordered" value={form.rating} onChange={(event) => setForm((current) => ({ ...current, rating: event.target.value }))}><option value="">Select rating</option>{[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} star{rating > 1 ? "s" : ""}</option>)}</select></label>
               <label className="form-control"><span className="label-text">Feedback (optional)</span><textarea className="textarea textarea-bordered" value={form.feedback} onChange={(event) => setForm((current) => ({ ...current, feedback: event.target.value }))} placeholder="Share feedback about this trip" /></label>
-              <button className="btn btn-success w-full" onClick={confirmCompletion}><Star className="h-4 w-4" /> Confirm trip and rating</button>
+              <button className="btn btn-success w-full" onClick={confirmCompletion} disabled={completionBusy}><Star className="h-4 w-4" /> {completionBusy ? "Completing trip…" : "Confirm trip and rating"}</button>
             </div> : null}
             {user.role === "FACULTY_STAFF" && ["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED", "TRANSFER_OR_VERIFICATION_PENDING"].includes(trip.status) ? <div className="mt-4 space-y-3">{incidentPanelOpen ? <div className="rounded-xl border border-error/30 bg-error/5 p-3"><p className="font-semibold text-error">Report an incident</p><p className="mt-1 text-xs text-slate-600">Choose the situation so transport operations receive the right response.</p><div className="mt-3 grid grid-cols-2 gap-2">{[["ACCIDENT", "Accident"], ["TRAFFIC", "Traffic"], ["BREAKDOWN", "Breakdown"], ["OTHER", "Other"]].map(([value, label]) => <button key={value} type="button" className={`btn btn-sm ${incidentKind === value ? "btn-error" : "btn-outline"}`} onClick={() => setIncidentKind(value)}>{label}</button>)}</div><textarea className="textarea textarea-bordered mt-3 w-full" value={incidentDetails} onChange={(event) => setIncidentDetails(event.target.value)} placeholder="Add details for transport operations (optional)" /><div className="mt-3 flex gap-2"><button className="btn btn-ghost flex-1" onClick={() => setIncidentPanelOpen(false)} disabled={incidentBusy}>Cancel</button><button className="btn btn-error flex-1" onClick={submitFacultyIncident} disabled={incidentBusy}>{incidentBusy ? "Sending…" : incidentKind === "BREAKDOWN" ? "Report breakdown" : "Send alert"}</button></div></div> : <button className="btn btn-error w-full" onClick={() => setIncidentPanelOpen(true)} disabled={incidentBusy}><AlertTriangle className="h-4 w-4" /> Emergency alert</button>}</div> : null}
           </div>

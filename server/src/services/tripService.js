@@ -29,15 +29,15 @@ function emit(room, event, payload) {
 }
 
 async function notifyTripParticipants(trip, title, message) {
-  const driver = await Driver.findById(trip.driverId).select("userId");
-  const managers = await User.find({
-    isActive: true,
-    $or: [
-      { role: "TRANSPORT_ADMIN" },
-      { role: "DEPARTMENT_COORDINATOR", departmentId: trip.departmentId }
-    ]
-  }).select("_id");
   try {
+    const driver = await Driver.findById(trip.driverId).select("userId");
+    const managers = await User.find({
+      isActive: true,
+      $or: [
+        { role: "TRANSPORT_ADMIN" },
+        { role: "DEPARTMENT_COORDINATOR", departmentId: trip.departmentId }
+      ]
+    }).select("_id");
     await notifyMany(
       [trip.facultyId, driver?.userId, ...managers.map((manager) => manager._id)],
       title,
@@ -262,7 +262,10 @@ export async function reassignTrip({ tripId, allocation, actor, allowCapacityOve
     trip.qrToken = makeQrToken(trip.tripId);
     trip.qrVerifiedAt = undefined;
     trip.qrConsumed = false;
-    trip.qrExpiresAt = new Date(Math.min(new Date(trip.scheduledEndTime).getTime(), Date.now() + 2 * 60 * 60 * 1000));
+    // A breakdown can happen after the original expected return time or cross
+    // midnight. Keep the replacement token valid long enough for the new driver
+    // to scan it instead of immediately creating an expired token.
+    trip.qrExpiresAt = new Date(Math.max(new Date(trip.scheduledEndTime).getTime(), Date.now() + 2 * 60 * 60 * 1000));
     trip.assignmentHistory.push({ vehicleId: vehicle._id, driverId: driver._id, assignedBy: actor?._id, reason: "Breakdown replacement" });
     await trip.save({ session });
     if (String(oldDriverId) !== String(driver._id)) await Driver.findByIdAndUpdate(oldDriverId, { status: "AVAILABLE" }, { session });
@@ -290,7 +293,7 @@ export async function generateTripQr(trip) {
     freshTrip.qrToken = makeQrToken(freshTrip.tripId);
     freshTrip.qrConsumed = false;
     freshTrip.qrVerifiedAt = undefined;
-    freshTrip.qrExpiresAt = new Date(Math.min(new Date(freshTrip.scheduledEndTime).getTime(), Date.now() + 2 * 60 * 60 * 1000));
+    freshTrip.qrExpiresAt = new Date(Math.max(new Date(freshTrip.scheduledEndTime).getTime(), Date.now() + 2 * 60 * 60 * 1000));
     await freshTrip.save();
   }
   return QRCode.toDataURL(freshTrip.qrToken);
@@ -308,7 +311,8 @@ export async function verifyQr({ tripId, qrToken, driver }) {
     error.status = 403;
     throw error;
   }
-  if (!isTodayInIndia(trip.scheduledStartTime)) {
+  const isReplacementVerification = ["TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip.status);
+  if (!isReplacementVerification && !isTodayInIndia(trip.scheduledStartTime)) {
     const error = new Error("QR verification is available only on the scheduled trip date.");
     error.status = 403;
     throw error;
@@ -447,6 +451,10 @@ export async function completeTrip({ tripId, actor, qrToken, rating, feedback })
   if (!trip || String(trip.facultyId) !== String(actor._id)) {
     const error = new Error("Only the faculty member who requested this trip can confirm it."); error.status = 403; throw error;
   }
+  // Completion is intentionally idempotent. A slow mobile network can lose the
+  // success response after the durable trip update, and retrying must not turn a
+  // correctly completed trip into a confusing error for the faculty member.
+  if (trip.status === "TRIP_COMPLETED" && trip.completionQrConsumed) return trip;
   if (trip.status !== "TRIP_COMPLETION_PENDING") {
     const error = new Error("This trip is not awaiting faculty confirmation."); error.status = 409; throw error;
   }
@@ -459,14 +467,27 @@ export async function completeTrip({ tripId, actor, qrToken, rating, feedback })
   trip.endTime = new Date();
   trip.status = "TRIP_COMPLETED";
   await trip.save();
-  const driver = await Driver.findByIdAndUpdate(trip.driverId, { status: "AVAILABLE", $inc: { totalTrips: 1 } }, { new: true });
-  if (driver) {
-    const ratedTrips = await Trip.find({ driverId: driver._id, status: "TRIP_COMPLETED", facultyRating: { $exists: true } }).select("facultyRating");
-    driver.rating = Number((ratedTrips.reduce((sum, item) => sum + item.facultyRating, 0) / ratedTrips.length).toFixed(1));
-    await driver.save();
+  // The trip is complete at this point. Fleet statistics, availability and
+  // maintenance updates must not change a successful confirmation into HTTP 500.
+  try {
+    const driver = await Driver.findByIdAndUpdate(trip.driverId, { status: "AVAILABLE", $inc: { totalTrips: 1 } }, { new: true });
+    if (driver) {
+      const ratedTrips = await Trip.find({ driverId: driver._id, status: "TRIP_COMPLETED", facultyRating: { $exists: true } }).select("facultyRating");
+      const ratings = ratedTrips.map((item) => Number(item.facultyRating)).filter(Number.isFinite);
+      if (ratings.length) {
+        driver.rating = Number((ratings.reduce((sum, value) => sum + value, 0) / ratings.length).toFixed(1));
+        await driver.save();
+      }
+    }
+  } catch (error) {
+    console.error("Trip completion driver update failed:", error.message);
   }
-  await Vehicle.findByIdAndUpdate(trip.vehicleId, { status: "AVAILABLE", currentKM: trip.endKM });
-  await ensureRoutineServiceSchedule(trip.vehicleId);
+  try {
+    await Vehicle.findByIdAndUpdate(trip.vehicleId, { status: "AVAILABLE", currentKM: trip.endKM });
+    await ensureRoutineServiceSchedule(trip.vehicleId);
+  } catch (error) {
+    console.error("Trip completion vehicle update failed:", error.message);
+  }
   await notifyTripParticipants(trip, "Trip completed", `Trip ${trip.tripId} was confirmed by the faculty member with a ${rating}-star rating.`);
   emit(`trip-room-${trip._id}`, "trip:completed", trip);
   emit("admin-room", "trip:completed", trip);
