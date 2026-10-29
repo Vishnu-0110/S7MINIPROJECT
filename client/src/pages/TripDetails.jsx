@@ -1,4 +1,4 @@
-import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
+import { Html5Qrcode } from "html5-qrcode";
 import { AlertTriangle, Camera, Navigation, QrCode, Star, Wrench } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -17,6 +17,8 @@ export default function TripDetails() {
   const [completionToken, setCompletionToken] = useState("");
   const [completionScanOpen, setCompletionScanOpen] = useState(false);
   const [completionBusy, setCompletionBusy] = useState(false);
+  const [driverCameraState, setDriverCameraState] = useState("idle");
+  const [completionCameraState, setCompletionCameraState] = useState("idle");
   const [token, setToken] = useState("");
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ startKM: "", endKM: "", rating: "", feedback: "" });
@@ -91,38 +93,22 @@ export default function TripDetails() {
 
   useEffect(() => {
     if (user.role !== "DRIVER" || startStep !== "scan" || !["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip?.status)) return undefined;
-    let handled = false;
-    const scanner = new Html5QrcodeScanner("qr-reader", cameraOnlyScannerConfig, false);
+    const scanner = new Html5Qrcode("qr-reader");
     scannerRef.current = scanner;
-    const onScan = async (decoded) => {
-      if (handled) return;
-      handled = true;
-      await clearScanner(scanner);
-      await handleScannedToken(decoded);
-    };
-    scanner.render(onScan, () => undefined);
+    setDriverCameraState("idle");
     return () => {
-      clearScanner(scanner);
+      stopQrScanner(scanner);
       if (scannerRef.current === scanner) scannerRef.current = null;
     };
   }, [startStep, user.role, trip?.status]);
 
   useEffect(() => {
     if (user.role !== "FACULTY_STAFF" || !completionScanOpen || trip?.status !== "TRIP_COMPLETION_PENDING") return undefined;
-    let handled = false;
-    const scanner = new Html5QrcodeScanner("completion-qr-reader", cameraOnlyScannerConfig, false);
+    const scanner = new Html5Qrcode("completion-qr-reader");
     completionScannerRef.current = scanner;
-    const onScan = async (decoded) => {
-      if (handled) return;
-      handled = true;
-      await clearScanner(scanner);
-      setCompletionToken(decoded);
-      setMessage("Completion QR scanned. Select a rating, then confirm completion.");
-      setCompletionScanOpen(false);
-    };
-    scanner.render(onScan, () => undefined);
+    setCompletionCameraState("idle");
     return () => {
-      clearScanner(scanner);
+      stopQrScanner(scanner);
       if (completionScannerRef.current === scanner) completionScannerRef.current = null;
     };
   }, [completionScanOpen, trip?.status, user.role]);
@@ -176,6 +162,48 @@ export default function TripDetails() {
   async function handleScannedToken(scannedToken) {
     const verified = await verify(scannedToken);
     if (verified && trip.status === "SCHEDULED") await startTrip(scannedToken);
+  }
+
+  async function startDriverCamera() {
+    const scanner = scannerRef.current;
+    if (!scanner || driverCameraState === "starting" || driverCameraState === "scanning") return;
+    setDriverCameraState("starting");
+    let handled = false;
+    try {
+      await startCameraScanner(scanner, async (decoded) => {
+        if (handled) return;
+        handled = true;
+        setDriverCameraState("idle");
+        await stopQrScanner(scanner);
+        await handleScannedToken(decoded);
+      });
+      setDriverCameraState("scanning");
+    } catch (error) {
+      setDriverCameraState("error");
+      setMessage(cameraErrorMessage(error));
+    }
+  }
+
+  async function startCompletionCamera() {
+    const scanner = completionScannerRef.current;
+    if (!scanner || completionCameraState === "starting" || completionCameraState === "scanning") return;
+    setCompletionCameraState("starting");
+    let handled = false;
+    try {
+      await startCameraScanner(scanner, async (decoded) => {
+        if (handled) return;
+        handled = true;
+        setCompletionCameraState("idle");
+        await stopQrScanner(scanner);
+        setCompletionToken(decoded);
+        setMessage("Completion QR scanned. Select a rating, then confirm completion.");
+        setCompletionScanOpen(false);
+      });
+      setCompletionCameraState("scanning");
+    } catch (error) {
+      setCompletionCameraState("error");
+      setMessage(cameraErrorMessage(error));
+    }
   }
 
   async function end() {
@@ -316,8 +344,9 @@ export default function TripDetails() {
                 <div className="rounded-xl bg-primary/5 p-3 text-sm font-medium text-primary">Step 2 of 2: Scan the faculty QR code. A successful scan verifies the trip and starts it automatically.</div>
                 <div className="flex items-center gap-2 text-sm font-medium text-primary"><Camera className="h-4 w-4" /> Camera scan</div>
                 <div id="qr-reader" className="qr-camera-reader" aria-label="Camera QR code scanner" />
-                <p className="text-xs text-slate-500">Tap “Request camera permissions” if it appears, allow access, then hold the QR code inside the frame. Image uploads are not used for trip verification.</p>
-                <button className="btn btn-ghost btn-sm w-full" onClick={() => setStartStep("kilometre")}>Cancel camera scan</button>
+                {driverCameraState !== "scanning" ? <button className="btn btn-primary w-full" onClick={startDriverCamera} disabled={driverCameraState === "starting"}><Camera className="h-4 w-4" /> {driverCameraState === "starting" ? "Starting camera…" : driverCameraState === "error" ? "Retry camera scanner" : "Start camera scanner"}</button> : null}
+                <p className="text-xs text-slate-500">Tap Start camera scanner, allow access if prompted, then hold the faculty QR code inside the frame. Image uploads are not used for trip verification.</p>
+                <button className="btn btn-ghost btn-sm w-full" onClick={() => { stopQrScanner(scannerRef.current); setDriverCameraState("idle"); setStartStep("kilometre"); }}>Cancel camera scan</button>
               </>}
             </div>
           ) : null}
@@ -349,7 +378,7 @@ export default function TripDetails() {
             <p className="text-sm text-slate-600">Live GPS updates appear in the tracking screen when the driver starts sending location records.</p>
             {user.role === "FACULTY_STAFF" && trip.status === "TRIP_COMPLETION_PENDING" ? <div className="mt-4 space-y-3">
               <div className="rounded-xl bg-primary/5 p-3 text-sm text-primary">Scan the driver’s completion QR code and submit your rating to end this trip.</div>
-              {completionScanOpen ? <><div id="completion-qr-reader" className="qr-camera-reader" aria-label="Completion QR code scanner" /><p className="text-xs text-slate-500">Tap “Request camera permissions” if it appears, allow access, then hold the driver’s QR code inside the frame.</p><button className="btn btn-ghost btn-sm w-full" onClick={() => setCompletionScanOpen(false)}>Cancel camera scan</button></> : <button className="btn btn-primary w-full" onClick={() => setCompletionScanOpen(true)}><Camera className="h-4 w-4" /> Scan completion QR</button>}
+              {completionScanOpen ? <><div id="completion-qr-reader" className="qr-camera-reader" aria-label="Completion QR code scanner" />{completionCameraState !== "scanning" ? <button className="btn btn-primary w-full" onClick={startCompletionCamera} disabled={completionCameraState === "starting"}><Camera className="h-4 w-4" /> {completionCameraState === "starting" ? "Starting camera…" : completionCameraState === "error" ? "Retry camera scanner" : "Start camera scanner"}</button> : null}<p className="text-xs text-slate-500">Tap Start camera scanner, allow access if prompted, then hold the driver’s QR code inside the frame.</p><button className="btn btn-ghost btn-sm w-full" onClick={() => { stopQrScanner(completionScannerRef.current); setCompletionCameraState("idle"); setCompletionScanOpen(false); }}>Cancel camera scan</button></> : <button className="btn btn-primary w-full" onClick={() => setCompletionScanOpen(true)}><Camera className="h-4 w-4" /> Scan completion QR</button>}
               {completionToken ? <p className="text-sm font-medium text-success">Completion QR scanned successfully.</p> : null}
               <label className="form-control"><span className="label-text">Star rating</span><select className="select select-bordered" value={form.rating} onChange={(event) => setForm((current) => ({ ...current, rating: event.target.value }))}><option value="">Select rating</option>{[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} star{rating > 1 ? "s" : ""}</option>)}</select></label>
               <label className="form-control"><span className="label-text">Feedback (optional)</span><textarea className="textarea textarea-bordered" value={form.feedback} onChange={(event) => setForm((current) => ({ ...current, feedback: event.target.value }))} placeholder="Share feedback about this trip" /></label>
@@ -363,21 +392,38 @@ export default function TripDetails() {
   );
 }
 
-const cameraOnlyScannerConfig = {
-  fps: 10,
-  qrbox: { width: 220, height: 220 },
-  aspectRatio: 1,
-  rememberLastUsedCamera: true,
-  supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
-};
+async function startCameraScanner(scanner, onScan) {
+  const config = { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1 };
+  try {
+    await scanner.start({ facingMode: { ideal: "environment" } }, config, onScan, () => undefined);
+  } catch (primaryError) {
+    const cameras = await Html5Qrcode.getCameras().catch(() => []);
+    const fallback = cameras.find((camera) => /back|rear|environment/i.test(camera.label)) || cameras[0];
+    if (!fallback) throw primaryError;
+    await scanner.start(fallback.id, config, onScan, () => undefined);
+  }
+}
 
-async function clearScanner(scanner) {
+async function stopQrScanner(scanner) {
   if (!scanner) return;
+  try {
+    if (scanner.isScanning) await scanner.stop();
+  } catch {
+    // Stopping an already stopped camera is safe.
+  }
   try {
     await scanner.clear();
   } catch {
-    // The scanner can already be cleared after a successful scan or component cleanup.
+    // The scanner target may already be removed during React cleanup.
   }
+}
+
+function cameraErrorMessage(error) {
+  const detail = String(error?.message || error || "").toLowerCase();
+  if (detail.includes("permission") || detail.includes("notallowed")) return "Camera permission is required. Allow camera access in the browser settings, then tap Retry camera scanner.";
+  if (detail.includes("notfound") || detail.includes("no camera")) return "No camera was found. Enable a camera on this device, then retry.";
+  if (detail.includes("notreadable") || detail.includes("track start")) return "The camera is currently busy. Close other camera apps and retry.";
+  return "The camera could not be started. Close other apps using the camera and tap Retry camera scanner.";
 }
 
 function currentLocation() {
