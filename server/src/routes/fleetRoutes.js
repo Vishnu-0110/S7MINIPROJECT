@@ -2,6 +2,8 @@ import { Router } from "express";
 import {
   Department,
   Driver,
+  EmergencyAlert,
+  Trip,
   User,
   Vehicle,
   VehicleDocument
@@ -13,6 +15,8 @@ import { driverSchema, vehicleSchema } from "../validators/fleetValidators.js";
 import { asyncHandler, ApiError, ok } from "../utils/apiResponse.js";
 import { humanId } from "../utils/id.js";
 import { parsePagination, paginationPayload } from "../utils/pagination.js";
+import { notifyMany } from "../services/notificationService.js";
+import { ensureRoutineServiceSchedule } from "../services/maintenanceService.js";
 
 export const fleetRoutes = Router();
 fleetRoutes.use(requireAuth);
@@ -22,6 +26,12 @@ const drivers = createCrudController(Driver, ["driverId", "licenseNumber"]);
 const departments = createCrudController(Department, ["code", "name"]);
 const users = createCrudController(User, ["name", "email", "role"]);
 const vehicleDocumentTypes = ["RC", "INSURANCE", "FC", "POLLUTION_CERTIFICATE"];
+const defaultDriverPassword = "SmartFleet@123";
+
+async function notifyFleetAdmins(title, message, type, metadata = {}) {
+  const admins = await User.find({ isActive: true, role: "TRANSPORT_ADMIN" }).select("_id");
+  await notifyMany(admins.map((admin) => admin._id), title, message, type, metadata);
+}
 
 const departmentNames = {
   CSE: "Computer Science and Engineering",
@@ -46,6 +56,14 @@ async function createUser(req, res) {
     );
     userFields.departmentId = departmentDoc._id;
   }
+  if (!userFields.departmentId && ["FACULTY_STAFF", "DEPARTMENT_COORDINATOR"].includes(userFields.role)) {
+    const defaultDepartment = await Department.findOneAndUpdate(
+      { code: "CSE" },
+      { $setOnInsert: { code: "CSE", name: departmentNames.CSE, isActive: true } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    userFields.departmentId = defaultDepartment._id;
+  }
 
   const user = await User.create(userFields);
   if (user.role === "DRIVER") {
@@ -57,7 +75,92 @@ async function createUser(req, res) {
       status: "AVAILABLE"
     });
   }
+  await notifyFleetAdmins("User created", `${user.name} was added as ${user.role.replaceAll("_", " ")}.`, "USER", { userId: user._id });
   return ok(res, "Created", user, 201);
+}
+
+async function createVehicle(req, res) {
+  const vehicle = await Vehicle.create({
+    ...req.body,
+    name: req.body.name || `${req.body.type} ${req.body.registrationNumber}`,
+    vehicleId: humanId("VEH"),
+    nextServiceKM: req.body.nextServiceKM || Number(req.body.currentKM || 0) + 6000
+  });
+  await ensureRoutineServiceSchedule(vehicle);
+  await notifyFleetAdmins("Vehicle added", `Vehicle ${vehicle.vehicleId} (${vehicle.registrationNumber}) was added to the fleet.`, "VEHICLE", { vehicleId: vehicle._id });
+  return ok(res, "Created", vehicle, 201);
+}
+
+function emailFromDriverName(name) {
+  const localPart = name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "");
+  if (!localPart) throw new ApiError("Enter a valid driver name", 400);
+  return `${localPart}@bit.edu.in`;
+}
+
+async function listDrivers(req, res) {
+  const { page, limit, skip } = parsePagination(req.query);
+  const [data, total] = await Promise.all([
+    Driver.find().populate("userId", "name email phone address").sort({ createdAt: -1 }).skip(skip).limit(limit),
+    Driver.countDocuments()
+  ]);
+  return ok(res, "List", data, 200, { pagination: paginationPayload(page, limit, total) });
+}
+
+async function driverHistory(req, res) {
+  const driver = await Driver.findById(req.params.id).populate("userId", "name email phone address");
+  if (!driver) throw new ApiError("Driver not found", 404);
+  const [trips, alerts] = await Promise.all([
+    Trip.find({ driverId: driver._id }).populate("requestId", "requestId").populate("vehicleId", "vehicleId registrationNumber type").populate("facultyId", "name email").sort({ scheduledStartTime: -1 }),
+    EmergencyAlert.find({ driverId: driver._id }).sort({ createdAt: -1 })
+  ]);
+  return ok(res, "Driver history", { driver, trips, alerts });
+}
+
+async function vehicleHistory(req, res) {
+  const vehicle = await Vehicle.findById(req.params.id);
+  if (!vehicle) throw new ApiError("Vehicle not found", 404);
+  const [trips, alerts] = await Promise.all([
+    Trip.find({ vehicleId: vehicle._id }).populate("requestId", "requestId").populate({ path: "driverId", populate: { path: "userId", select: "name" } }).populate("facultyId", "name").sort({ scheduledStartTime: -1 }),
+    EmergencyAlert.find({ vehicleId: vehicle._id }).sort({ createdAt: -1 })
+  ]);
+  return ok(res, "Vehicle history", { vehicle, trips, alerts });
+}
+
+async function createDriver(req, res) {
+  const { name, licenseNumber, phone, address } = req.body;
+  const email = emailFromDriverName(name);
+
+  const [existingUser, existingDriver] = await Promise.all([
+    User.exists({ email }),
+    Driver.exists({ licenseNumber })
+  ]);
+  if (existingUser) throw new ApiError(`A user already exists with the email ${email}`, 409);
+  if (existingDriver) throw new ApiError("A driver already exists with this licence number", 409);
+
+  const user = await User.create({
+    name,
+    email,
+    password: defaultDriverPassword,
+    role: "DRIVER",
+    phone,
+    address,
+    isActive: true
+  });
+  const driver = await Driver.create({
+    driverId: humanId("DRV"),
+    userId: user._id,
+    licenseNumber,
+    phone,
+    status: "AVAILABLE"
+  });
+  await notifyFleetAdmins("Driver added", `${name} was added as a driver.`, "USER", { userId: user._id, driverId: driver._id });
+  return ok(res, "Created", { driver, credentials: { email, password: defaultDriverPassword } }, 201);
 }
 
 async function createVehicleDocument(req, res) {
@@ -79,25 +182,28 @@ async function createVehicleDocument(req, res) {
   });
   vehicle.documents.addToSet(document._id);
   await vehicle.save();
+  await notifyFleetAdmins("Vehicle document added", `${type.replaceAll("_", " ")} was added for vehicle ${vehicle.registrationNumber}.`, "DOCUMENT", { documentId: document._id, vehicleId: vehicle._id });
   return ok(res, "Created", document, 201);
 }
 
 async function listVehicleDocuments(req, res) {
   const { page, limit, skip } = parsePagination(req.query);
   const [data, total] = await Promise.all([
-    VehicleDocument.find().populate("vehicleId", "vehicleId registrationNumber type").sort({ expiresAt: 1 }).skip(skip).limit(limit),
+    VehicleDocument.find().populate("vehicleId", "vehicleId registrationNumber type").sort({ createdAt: -1 }).skip(skip).limit(limit),
     VehicleDocument.countDocuments()
   ]);
   return ok(res, "List", data, 200, { pagination: paginationPayload(page, limit, total) });
 }
 
 fleetRoutes.get("/vehicles", asyncHandler(vehicles.list));
-fleetRoutes.post("/vehicles", requireRoles("TRANSPORT_ADMIN"), validate(vehicleSchema), asyncHandler(vehicles.create));
+fleetRoutes.post("/vehicles", requireRoles("TRANSPORT_ADMIN"), validate(vehicleSchema), asyncHandler(createVehicle));
+fleetRoutes.get("/vehicles/:id/history", requireRoles("TRANSPORT_ADMIN"), asyncHandler(vehicleHistory));
 fleetRoutes.get("/vehicles/:id", asyncHandler(vehicles.get));
 fleetRoutes.patch("/vehicles/:id", requireRoles("TRANSPORT_ADMIN"), asyncHandler(vehicles.update));
 
-fleetRoutes.get("/drivers", asyncHandler(drivers.list));
-fleetRoutes.post("/drivers", requireRoles("TRANSPORT_ADMIN"), validate(driverSchema), asyncHandler(drivers.create));
+fleetRoutes.get("/drivers", asyncHandler(listDrivers));
+fleetRoutes.post("/drivers", requireRoles("TRANSPORT_ADMIN"), validate(driverSchema), asyncHandler(createDriver));
+fleetRoutes.get("/drivers/:id/history", requireRoles("TRANSPORT_ADMIN"), asyncHandler(driverHistory));
 fleetRoutes.get("/drivers/:id", asyncHandler(drivers.get));
 fleetRoutes.patch("/drivers/:id", requireRoles("TRANSPORT_ADMIN"), asyncHandler(drivers.update));
 

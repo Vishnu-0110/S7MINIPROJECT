@@ -1,7 +1,7 @@
 import { Driver, Trip, VehicleRequest } from "../models/index.js";
 import { ApiError, ok } from "../utils/apiResponse.js";
 import { parsePagination, paginationPayload } from "../utils/pagination.js";
-import { createTripFromAssignment, endTrip, generateTripQr, saveGps, startTrip, verifyQr } from "../services/tripService.js";
+import { completeTrip, createTripFromAssignment, generateCompletionQr, generateTripQr, requestTripCompletion, saveGps, startTrip, verifyQr } from "../services/tripService.js";
 import { indiaDayRange, isTodayInIndia } from "../utils/indiaTime.js";
 
 export async function assignTrip(req, res) {
@@ -25,25 +25,29 @@ export async function listTrips(req, res) {
   if (req.user.role === "DRIVER") {
     const driver = await Driver.findOne({ userId: req.user._id });
     if (!driver) return ok(res, "Trips", [], 200, { pagination: paginationPayload(page, limit, 0) });
-    const { start, end } = indiaDayRange();
     query.driverId = driver._id;
-    query.$or = [
-      { scheduledStartTime: { $gte: start, $lt: end } },
-      { status: { $in: ["TRIP_STARTED", "TRIP_RESUMED"] } }
-    ];
   }
   if (req.query.status) query.status = req.query.status;
-  const [data, total] = await Promise.all([
+  const [trips, total] = await Promise.all([
     Trip.find(query)
+      .populate("requestId", "requestId")
       .populate("facultyId", "name email")
       .populate("departmentId", "name code")
       .populate("vehicleId")
       .populate({ path: "driverId", populate: { path: "userId", select: "name email phone" } })
-      .sort({ scheduledStartTime: -1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit),
     Trip.countDocuments(query)
   ]);
+  const data = trips.map((trip) => {
+    const item = trip.toObject();
+    if (req.user.role !== "TRANSPORT_ADMIN") {
+      delete item.facultyRating;
+      delete item.facultyFeedback;
+    }
+    return item;
+  });
   return ok(res, "Trips", data, 200, { pagination: paginationPayload(page, limit, total) });
 }
 
@@ -60,8 +64,7 @@ async function assertTripAccess(trip, user) {
   if (user.role === "DRIVER") {
     const driver = await Driver.findOne({ userId: user._id });
     if (driver && String(trip.driverId?._id || trip.driverId) === String(driver._id)) {
-      if (isTodayInIndia(trip.scheduledStartTime) || ["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status)) return;
-      throw new ApiError("Driver trip details are available on the scheduled trip date.", 403);
+      return;
     }
   }
   throw new ApiError("Forbidden", 403);
@@ -69,12 +72,18 @@ async function assertTripAccess(trip, user) {
 
 export async function getTrip(req, res) {
   const trip = await Trip.findById(req.params.id)
+    .populate("requestId", "requestId")
     .populate("facultyId", "name email")
     .populate("departmentId", "name code")
     .populate("vehicleId")
     .populate({ path: "driverId", populate: { path: "userId", select: "name email phone" } });
   await assertTripAccess(trip, req.user);
-  return ok(res, "Trip details", trip);
+  const data = trip.toObject();
+  if (req.user.role !== "TRANSPORT_ADMIN") {
+    delete data.facultyRating;
+    delete data.facultyFeedback;
+  }
+  return ok(res, "Trip details", data);
 }
 
 export async function tripQr(req, res) {
@@ -100,7 +109,15 @@ export async function startTripAction(req, res) {
 }
 
 export async function endTripAction(req, res) {
-  return ok(res, "Trip completed", await endTrip({ tripId: req.params.id, actor: req.user, ...req.body }));
+  return ok(res, "Ending odometer saved. Faculty confirmation is required.", await requestTripCompletion({ tripId: req.params.id, actor: req.user, ...req.body }));
+}
+
+export async function completionQr(req, res) {
+  return ok(res, "Completion QR generated", { qr: await generateCompletionQr(req.params.id, req.user) });
+}
+
+export async function completeTripAction(req, res) {
+  return ok(res, "Trip completed", await completeTrip({ tripId: req.params.id, actor: req.user, ...req.body }));
 }
 
 export async function gpsAction(req, res) {

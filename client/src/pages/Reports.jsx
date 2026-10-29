@@ -55,7 +55,7 @@ export default function Reports() {
       <DataTable
         rows={trips}
         columns={[
-          { key: "tripId", label: "Trip" },
+          { key: "requestId", label: "Request", render: (row) => row.requestId?.requestId || row.tripId },
           { key: "vehicle", label: "Vehicle", render: (row) => row.vehicleId?.vehicleId || "-" },
           { key: "driver", label: "Driver", render: (row) => row.driverId?.userId?.name || "-" },
           { key: "destination", label: "Destination" },

@@ -11,6 +11,7 @@
 html,
 body,
 #root {
+  width: 100%;
   min-height: 100%;
 }
 
@@ -40,6 +41,22 @@ textarea {
   overflow: hidden;
 }
 
+.app-main-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Keep real content inside its card instead of hiding an underlying overflow bug. */
+.alert,
+.table td,
+.table th,
+.break-safe {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 button, input, select, textarea {
   font: inherit;
 }
@@ -63,6 +80,11 @@ button, input, select, textarea {
   .table-card-actions .btn,
   .table-card-actions a {
     min-height: 2.5rem;
+  }
+
+  .table-mobile-card .btn-xs {
+    min-height: 2.5rem;
+    padding-inline: 0.75rem;
   }
 }
 
@@ -106,6 +128,56 @@ button, input, select, textarea {
   @apply grid gap-6 xl:grid-cols-[minmax(0,1fr)_22.5rem];
 }
 
+/* A contained workspace keeps supporting panels fixed while its record list scrolls. */
+@media (min-width: 1280px) {
+  .workspace-grid {
+    height: calc(100dvh - 8.5rem);
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .workspace-grid > :first-child,
+  .workspace-grid > aside {
+    min-height: 0;
+  }
+
+  .workspace-list-scroll {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding-right: 0.25rem;
+  }
+
+  .workspace-side-panel {
+    align-self: start;
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+@media (max-width: 1279px) {
+  .workspace-grid {
+    min-height: 0;
+  }
+}
+
+.workspace-list-scroll .table-scroll-frame {
+  max-width: 100%;
+}
+
+.table-scroll-frame {
+  min-width: 0;
+  max-width: 100%;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll-frame .table {
+  min-width: max-content;
+}
+
 .responsive-map-grid {
   @apply grid gap-6 xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)_minmax(0,320px)];
 }
@@ -124,6 +196,31 @@ button, input, select, textarea {
 #qr-reader img {
   width: 100% !important;
   height: auto !important;
+}
+
+@media (max-width: 639px) {
+  .app-main-scroll {
+    padding: 1rem;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+  }
+
+  .table-card-actions {
+    gap: 0.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 .auth-background {

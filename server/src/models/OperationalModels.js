@@ -9,6 +9,8 @@ const maintenanceSchema = new mongoose.Schema(
     type: String,
     serviceDate: Date,
     nextServiceKM: Number,
+    intervalKM: Number,
+    intervalMonths: Number,
     currentKM: Number,
     risk: { type: String, enum: ["LOW", "MEDIUM", "HIGH"], default: "LOW" },
     status: { type: String, enum: ["SCHEDULED", "COMPLETED", "OVERDUE", "BREAKDOWN"], default: "SCHEDULED" },

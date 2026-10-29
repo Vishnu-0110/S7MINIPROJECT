@@ -2,6 +2,7 @@ export { Department } from "./Department.js";
 export { User } from "./User.js";
 export { Vehicle } from "./Vehicle.js";
 export { Driver } from "./Driver.js";
+export { DriverLeave } from "./DriverLeave.js";
 export { VehicleRequest } from "./VehicleRequest.js";
 export { Trip } from "./Trip.js";
 export { Approval } from "./Approval.js";

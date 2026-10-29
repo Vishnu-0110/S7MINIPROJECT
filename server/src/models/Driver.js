@@ -12,7 +12,7 @@ const driverSchema = new mongoose.Schema(
       enum: ["AVAILABLE", "ASSIGNED", "IN_TRIP", "OFF_DUTY", "INACTIVE"],
       default: "AVAILABLE"
     },
-    rating: { type: Number, default: 5 },
+    rating: { type: Number, min: 1, max: 5 },
     totalTrips: { type: Number, default: 0 },
     incidents: [{ type: mongoose.Schema.Types.ObjectId, ref: "DriverIncident" }]
   },

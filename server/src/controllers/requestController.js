@@ -1,4 +1,4 @@
-import { Approval, VehicleRequest } from "../models/index.js";
+import { Approval, Trip, User, VehicleRequest } from "../models/index.js";
 import { ApiError, ok } from "../utils/apiResponse.js";
 import { humanId } from "../utils/id.js";
 import { parsePagination, paginationPayload } from "../utils/pagination.js";
@@ -6,12 +6,31 @@ import { createApprovalsForRequest, decideApproval, notifyApprovalParticipants }
 import { runSmartAllocation } from "../services/allocationService.js";
 import { scheduleApprovedRequest } from "../services/tripService.js";
 import { audit } from "../services/auditService.js";
-import { notify } from "../services/notificationService.js";
+import { notify, notifyMany } from "../services/notificationService.js";
+
+async function notifyRequestParticipants(request, title, message) {
+  const managers = await User.find({
+    isActive: true,
+    $or: [
+      { role: "TRANSPORT_ADMIN" },
+      { role: "DEPARTMENT_COORDINATOR", departmentId: request.departmentId }
+    ]
+  }).select("_id");
+  await notifyMany(
+    [request.facultyId, ...managers.map((manager) => manager._id)],
+    title,
+    message,
+    "REQUEST",
+    { requestId: request._id, approvalVersion: request.approvalVersion }
+  );
+}
 
 export async function createRequest(req, res) {
   const payload = req.body;
   const request = await VehicleRequest.create({
     ...payload,
+    purpose: payload.purpose || `${payload.tripType} to ${payload.destination}`,
+    source: payload.source || "BIT Campus",
     requestId: humanId("REQ"),
     facultyId: req.user._id,
     departmentId: req.user.departmentId || payload.departmentId,
@@ -21,6 +40,7 @@ export async function createRequest(req, res) {
   });
   await createApprovalsForRequest(request);
   await notifyApprovalParticipants(request);
+  await notify(request.facultyId, "Request submitted", `Your request ${request.requestId} was submitted and is awaiting approval.`, "REQUEST", { requestId: request._id });
   await audit(req.user._id, "REQUEST_CREATED", "VehicleRequest", request._id);
   return ok(res, "Request submitted", request, 201);
 }
@@ -38,24 +58,26 @@ export async function listRequests(req, res) {
     const approvalRequestIds = await Approval.distinct("requestId", { status: "PENDING", approverRole: approvalRole });
     query._id = { $in: approvalRequestIds };
   }
-  const [data, total] = await Promise.all([
+  const [requests, total] = await Promise.all([
     VehicleRequest.find(query).populate("facultyId", "name email").populate("departmentId", "name code").sort({ createdAt: -1 }).skip(skip).limit(limit),
     VehicleRequest.countDocuments(query)
   ]);
-  return ok(res, "Requests", data, 200, { pagination: paginationPayload(page, limit, total) });
+  return ok(res, "Requests", requests, 200, { pagination: paginationPayload(page, limit, total) });
 }
 
 export async function getRequest(req, res) {
-  const request = await VehicleRequest.findById(req.params.id)
-    .populate("facultyId", "name email")
-    .populate("departmentId", "name code");
+  const request = await VehicleRequest.findById(req.params.id);
   if (!request) throw new ApiError("Request not found", 404);
-  const sameUser = String(request.facultyId?._id || request.facultyId) === String(req.user._id);
-  const sameDepartment = String(request.departmentId?._id || request.departmentId) === String(req.user.departmentId);
+  const sameUser = request.facultyId.equals(req.user._id);
+  const sameDepartment = Boolean(req.user.departmentId) && request.departmentId.equals(req.user.departmentId);
   const privileged = req.user.role === "TRANSPORT_ADMIN";
   if (!sameUser && !(req.user.role === "DEPARTMENT_COORDINATOR" && sameDepartment) && !privileged) {
     throw new ApiError("Forbidden", 403);
   }
+  await request.populate([
+    { path: "facultyId", select: "name email" },
+    { path: "departmentId", select: "name code" }
+  ]);
   const approvals = await Approval.find({ requestId: req.params.id }).sort({ level: 1 }).populate("approverId", "name email role");
   return ok(res, "Request details", { request, approvals });
 }
@@ -81,7 +103,7 @@ export async function cancelRequest(req, res) {
   request.history.push({ status: "CANCELLED", actorId: req.user._id, note: "Cancelled" });
   await request.save();
   await audit(req.user._id, "REQUEST_CANCELLED", "VehicleRequest", request._id);
-  await notify(request.facultyId, "Request cancelled", `Your request ${request.requestId} has been cancelled.`, "REQUEST", { requestId: request._id });
+  await notifyRequestParticipants(request, "Request cancelled", `Request ${request.requestId} has been cancelled.`);
   return ok(res, "Cancelled", request);
 }
 
@@ -108,6 +130,7 @@ export async function updateRequest(req, res) {
     await request.save();
     await createApprovalsForRequest(request);
     await notifyApprovalParticipants(request);
+    await notifyRequestParticipants(request, "Request updated", `Request ${request.requestId} was updated and requires approval again.`);
   } else {
     await request.save();
   }

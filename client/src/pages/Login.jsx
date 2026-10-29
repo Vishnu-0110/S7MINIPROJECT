@@ -31,7 +31,7 @@ export default function Login() {
   }
 
   return (
-    <main className="auth-background grid min-h-screen place-items-center p-4 sm:p-8">
+    <main className="auth-background grid min-h-screen min-h-dvh place-items-center p-4 sm:p-8">
       <section className="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-white/15 bg-white shadow-2xl shadow-slate-950/30 lg:grid-cols-[1.05fr_.95fr]">
         <div className="relative hidden min-h-[620px] overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-primary p-10 text-white lg:block">
           <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-teal-300/20 blur-2xl" />

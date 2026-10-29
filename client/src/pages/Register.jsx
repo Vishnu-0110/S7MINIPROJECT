@@ -34,7 +34,7 @@ export default function Register() {
   }
 
   return (
-    <main className="auth-background grid min-h-screen place-items-center p-4 sm:p-8">
+    <main className="auth-background grid min-h-screen min-h-dvh place-items-center p-4 sm:p-8">
       <section className="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-white/15 bg-white shadow-2xl shadow-slate-950/30 lg:grid-cols-[.9fr_1.1fr]">
         <div className="relative hidden min-h-[650px] overflow-hidden bg-gradient-to-br from-primary via-teal-700 to-slate-950 p-10 text-white lg:block">
           <div className="absolute -left-20 top-1/4 h-64 w-64 rounded-full bg-teal-200/20 blur-2xl" />

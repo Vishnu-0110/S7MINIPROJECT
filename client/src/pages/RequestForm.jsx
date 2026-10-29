@@ -8,15 +8,11 @@ import { api } from "../lib/api.js";
 
 const schema = z.object({
   tripType: z.string().min(1),
-  purpose: z.string().min(3),
-  source: z.string().min(2),
   destination: z.string().min(2),
   passengerCount: z.coerce.number().positive(),
   date: z.string().min(1),
   departureTime: z.string().min(1),
-  returnTime: z.string().min(1),
-  priority: z.string(),
-  requiredFacilities: z.string().optional()
+  priority: z.string()
 });
 
 const tripTypes = ["Local Official Visit", "Industrial Visit", "Field Trip", "Conference", "Placement", "Event", "Academic Visit", "Outstation Trip", "Other Official Trip"];
@@ -30,7 +26,6 @@ export default function RequestForm() {
     resolver: zodResolver(schema),
     defaultValues: {
       tripType: "Industrial Visit",
-      source: "BIT",
       priority: "Normal"
     }
   });
@@ -50,7 +45,6 @@ export default function RequestForm() {
     if (aiResult.tripType) setValue("tripType", aiResult.tripType);
     if (aiResult.destination) setValue("destination", aiResult.destination);
     if (aiResult.passengerCount) setValue("passengerCount", aiResult.passengerCount);
-    if (aiResult.purpose) setValue("purpose", aiResult.purpose);
     if (aiResult.timeText) {
       const time = aiResult.timeText.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
       if (time) {
@@ -70,21 +64,16 @@ export default function RequestForm() {
   async function onSubmit(values) {
     try {
       const departure = new Date(`${values.date}T${values.departureTime}`);
-      const returning = new Date(`${values.date}T${values.returnTime}`);
       if (departure <= new Date()) {
         setError("root", { message: "Departure time must be in the future." });
         return;
       }
-      if (returning <= departure) {
-        setError("root", { message: "Return time must be after departure time." });
-        return;
-      }
+      const returning = new Date(departure.getTime() + 8 * 60 * 60 * 1000);
       const payload = {
         ...values,
-        requiredFacilities: values.requiredFacilities?.split(",").map((value) => value.trim()).filter(Boolean) || [],
         date: values.date,
         departureTime: `${values.date}T${values.departureTime}`,
-        returnTime: `${values.date}T${values.returnTime}`,
+        returnTime: returning.toISOString(),
         waypoints: [],
         passengers: []
       };
@@ -100,23 +89,18 @@ export default function RequestForm() {
       <section className="rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="text-lg font-semibold">Vehicle Request</h2>
         <form className="mt-5 grid gap-4 md:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
-          <select className="select select-bordered" {...register("tripType")}>
+          <select className="select select-bordered" aria-label="Trip type" {...register("tripType")}>
             {tripTypes.map((type) => <option key={type}>{type}</option>)}
           </select>
-          <input className="input input-bordered" placeholder="Purpose" {...register("purpose")} />
-          <input className="input input-bordered" placeholder="Source" {...register("source")} />
-          <input className="input input-bordered" placeholder="Destination" {...register("destination")} />
-          <input className="input input-bordered" placeholder="Passenger count" type="number" {...register("passengerCount")} />
-          <select className="select select-bordered" {...register("priority")}>
+          <input className="input input-bordered" aria-label="Destination" placeholder="Destination" {...register("destination")} />
+          <input className="input input-bordered" aria-label="Passenger count" placeholder="Passenger count" type="number" {...register("passengerCount")} />
+          <select className="select select-bordered" aria-label="Request priority" {...register("priority")}>
             <option>Normal</option>
             <option>High</option>
             <option>Urgent</option>
           </select>
-          <input className="input input-bordered" type="date" {...register("date")} />
-          <input className="input input-bordered" type="time" {...register("departureTime")} />
-          <input className="input input-bordered" type="time" {...register("returnTime")} />
-          <input className="input input-bordered md:col-span-2" placeholder="Required facilities, separated by commas (for example: wheelchair access, air conditioning)" {...register("requiredFacilities")} />
-          <textarea className="textarea textarea-bordered md:col-span-2" placeholder="Special requirements" {...register("specialRequirements")} />
+          <input className="input input-bordered" aria-label="Trip date" type="date" {...register("date")} />
+          <label className="form-control"><span className="label-text mb-1">Start time</span><input className="input input-bordered" type="time" {...register("departureTime")} /></label>
           {formState.errors.root ? <p className="text-sm text-error md:col-span-2">{formState.errors.root.message}</p> : null}
           <button className="btn btn-primary md:col-span-2" disabled={formState.isSubmitting}>
             <Send className="h-4 w-4" />

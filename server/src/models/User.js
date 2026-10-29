@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ROLES, required: true },
     departmentId: { type: mongoose.Schema.Types.ObjectId, ref: "Department" },
     phone: String,
+    address: String,
     isActive: { type: Boolean, default: true },
     lastLoginAt: Date
   },

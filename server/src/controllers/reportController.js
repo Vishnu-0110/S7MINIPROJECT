@@ -13,6 +13,7 @@ export async function tripsCsv(req, res) {
   const query = {};
   if (req.query.status) query.status = req.query.status;
   const trips = await Trip.find(query)
+    .populate("requestId", "requestId")
     .populate("facultyId", "name email")
     .populate("departmentId", "name code")
     .populate("vehicleId", "vehicleId registrationNumber")
@@ -21,9 +22,9 @@ export async function tripsCsv(req, res) {
     .limit(1000);
 
   const rows = [
-    ["Trip ID", "Faculty", "Department", "Vehicle", "Driver", "Destination", "Scheduled Start", "Distance", "Fuel Used", "Fuel Efficiency", "Status"],
+    ["Request ID", "Faculty", "Department", "Vehicle", "Driver", "Destination", "Scheduled Start", "Distance", "Fuel Used", "Fuel Efficiency", "Status"],
     ...trips.map((trip) => [
-      trip.tripId,
+      trip.requestId?.requestId || trip.tripId,
       trip.facultyId?.name,
       trip.departmentId?.code,
       trip.vehicleId?.vehicleId,

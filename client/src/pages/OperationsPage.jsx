@@ -15,6 +15,9 @@ const configs = {
       { key: "type", label: "Type" },
       { key: "risk", label: "Risk" },
       { key: "status", label: "Status" },
+      { key: "currentKM", label: "Current KM" },
+      { key: "nextServiceKM", label: "Service due KM" },
+      { key: "serviceDate", label: "Service due date", render: (row) => row.serviceDate ? new Date(row.serviceDate).toLocaleDateString() : "—" },
       { key: "expiresAt", label: "Expiry Date", render: (row) => row.expiresAt ? new Date(row.expiresAt).toLocaleDateString() : "—" }
     ],
     fields: ["vehicleId", "type", "currentKM", "nextServiceKM", "notes"]
@@ -141,20 +144,20 @@ export default function OperationsPage({ resource }) {
   if (loading) return <LoadingState />;
 
   return (
-    <section className="responsive-panel-grid">
-      <div className="space-y-4">
+    <section className="responsive-panel-grid workspace-grid">
+      <div className="flex min-h-0 flex-col gap-4">
         <div className="flex items-center gap-2">
           {resource === "emergencies" ? <AlertTriangle className="h-5 w-5 text-error" /> : null}
           <h2 className="text-lg font-semibold">{cfg.title}</h2>
         </div>
         {error ? <div className="alert alert-error">{error}</div> : null}
         {optionsError ? <div className="alert alert-warning">Some selection lists could not be loaded: {optionsError}</div> : null}
-        <DataTable
+        <div className="workspace-list-scroll flex-1"><DataTable
           rows={data}
           columns={resource === "emergencies" ? [...cfg.columns, { key: "action", label: "Action", render: (row) => row.status === "RESOLVED" || user?.role === "DRIVER" ? "-" : <div className="flex flex-wrap gap-2">{row.status === "OPEN" ? <button className="btn btn-warning btn-xs" onClick={() => acknowledgeEmergency(row._id)}><CheckCircle2 className="h-3 w-3" /> Acknowledge</button> : null}<button className="btn btn-outline btn-xs" onClick={() => silenceEmergency(row._id)}><Volume2 className="h-3 w-3" /> Stop alarm</button><button className="btn btn-success btn-xs" onClick={() => resolveEmergency(row._id)}>Resolve</button></div> }] : cfg.columns}
-        />
+        /></div>
       </div>
-      {canAdd ? <aside className="rounded-lg border border-slate-200 bg-white p-5">
+      {canAdd ? <aside className="workspace-side-panel rounded-lg border border-slate-200 bg-white p-5">
         <h3 className="font-semibold">Add record</h3>
         <form className="mt-4 space-y-3" onSubmit={submit}>
           {cfg.fields.map((field) => <OperationField key={field} field={field} form={form} setForm={setForm} options={options} />)}
@@ -165,7 +168,7 @@ export default function OperationsPage({ resource }) {
           </button>
         </form>
       </aside>
-        : <aside className="rounded-lg border border-error/30 bg-error/5 p-5">
+        : <aside className="workspace-side-panel rounded-lg border border-error/30 bg-error/5 p-5">
         <BellRing className="h-6 w-6 text-error" />
         <h3 className="mt-3 font-semibold">Emergency alerts</h3>
         <p className="mt-2 text-sm text-slate-600">Acknowledge takes responsibility, Stop alarm only silences your browser, and Resolve closes the incident after it is handled.</p>
@@ -195,7 +198,7 @@ function OperationField({ field, form, setForm, options }) {
   const update = (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
   const optionSets = {
     vehicleId: options.vehicles.map((item) => ({ value: item._id, label: `${item.vehicleId} — ${item.registrationNumber}` })),
-    tripId: options.trips.map((item) => ({ value: item._id, label: `${item.tripId} — ${item.destination}` })),
+    tripId: options.trips.map((item) => ({ value: item._id, label: `${item.requestId?.requestId || item.tripId} — ${item.destination}` })),
     driverId: options.drivers.map((item) => ({ value: item._id, label: item.driverId }))
   };
   if (optionSets[field]) {

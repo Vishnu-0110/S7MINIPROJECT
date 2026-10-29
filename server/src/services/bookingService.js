@@ -1,4 +1,4 @@
-import { Maintenance, Trip } from "../models/index.js";
+import { DriverLeave, Maintenance, Trip } from "../models/index.js";
 
 export function hasOverlap(startA, endA, startB, endB) {
   return new Date(startA) < new Date(endB) && new Date(endA) > new Date(startB);
@@ -23,6 +23,18 @@ export async function assertNoDoubleBooking({ vehicleId, driverId, startTime, en
   const driverConflict = await Trip.findOne({ ...tripQuery, driverId });
   if (driverConflict) {
     const error = new Error("DOUBLE BOOKING BLOCKED. Driver already has an overlapping trip.");
+    error.status = 409;
+    throw error;
+  }
+
+  const leaveConflict = await DriverLeave.findOne({
+    driverId,
+    status: "APPROVED",
+    fromDate: { $lte: endTime },
+    toDate: { $gte: startTime }
+  });
+  if (leaveConflict) {
+    const error = new Error("Driver is on approved leave during this trip.");
     error.status = 409;
     throw error;
   }

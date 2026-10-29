@@ -22,19 +22,24 @@ export const qrVerifySchema = z.object({
 
 export const startTripSchema = z.object({
   body: z.object({
-    startKM: z.coerce.number().nonnegative(),
-    qrToken: z.string().optional(),
+    startKM: z.coerce.number().finite().nonnegative(),
+    qrToken: z.string().min(8, "Scan and verify the trip QR code before starting."),
     location: z.object({ latitude: z.number(), longitude: z.number(), accuracy: z.number().optional() }).optional()
   })
 });
 
 export const endTripSchema = z.object({
   body: z.object({
-    endKM: z.coerce.number().nonnegative(),
-    fuelUsed: z.coerce.number().nonnegative().default(0),
-    actualCost: z.coerce.number().nonnegative().optional(),
-    notes: z.string().optional(),
+    endKM: z.coerce.number().finite().nonnegative(),
     location: z.object({ latitude: z.number(), longitude: z.number(), accuracy: z.number().optional() }).optional()
+  })
+});
+
+export const tripCompletionSchema = z.object({
+  body: z.object({
+    qrToken: z.string().min(8),
+    rating: z.coerce.number().int().min(1).max(5),
+    feedback: z.string().trim().max(1000).optional()
   })
 });
 

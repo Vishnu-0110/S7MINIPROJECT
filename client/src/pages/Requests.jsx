@@ -9,12 +9,16 @@ import { api } from "../lib/api.js";
 
 export default function Requests() {
   const { data, loading, error, reload } = useApiResource("/requests");
+  const { data: actionableRequests, loading: approvalsLoading, error: approvalsError, reload: reloadApprovals } = useApiResource("/requests?status=PENDING_APPROVAL&actionable=true");
   const user = useAuthStore((state) => state.user);
   const canCreate = user?.role === "FACULTY_STAFF";
   const canAllocate = user?.role === "TRANSPORT_ADMIN";
+  const canApprove = ["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"].includes(user?.role);
   const [message, setMessage] = useState("");
   const [approvalDetails, setApprovalDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [busy, setBusy] = useState("");
+  const actionableIds = new Set((actionableRequests || []).map((request) => request._id));
 
   async function showApprovalDetails(id) {
     setDetailsLoading(true);
@@ -39,7 +43,25 @@ export default function Requests() {
       setMessage(cancelError.message);
     }
   }
-  if (loading) return <LoadingState />;
+
+  async function decide(id, action) {
+    setBusy(id);
+    setMessage("");
+    try {
+      await api.post(`/requests/${id}/${action}`, {
+        comments: action === "approve" ? "Approved" : "Rejected from requests"
+      });
+      setMessage(action === "approve" ? "Request approved." : "Request rejected.");
+      await Promise.all([reload(), reloadApprovals()]);
+      if (approvalDetails?.request?._id === id) await showApprovalDetails(id);
+    } catch (decisionError) {
+      setMessage(decisionError.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  if (loading || approvalsLoading) return <LoadingState />;
 
   return (
     <section className="space-y-4">
@@ -47,12 +69,12 @@ export default function Requests() {
         <h2 className="text-lg font-semibold">Vehicle Requests</h2>
         {canCreate ? <Link className="btn btn-primary btn-sm" to="/request/new">New request</Link> : null}
       </div>
-      {error ? <div className="alert alert-error">{error}</div> : null}
+      {error || approvalsError ? <div className="alert alert-error">{error || approvalsError}</div> : null}
       {message ? <div className="alert alert-info">{message}</div> : null}
       <DataTable
         rows={data}
         columns={[
-          { key: "requestId", label: "Request" },
+          { key: "requestId", label: "Request", render: (row) => row.requestId },
           { key: "facultyId", label: "Faculty", render: (row) => row.facultyId?.name || "Faculty" },
           { key: "tripType", label: "Type" },
           { key: "destination", label: "Destination" },
@@ -64,6 +86,10 @@ export default function Requests() {
             render: (row) =>
               <div className="flex flex-wrap items-center gap-2">
                 <button className="btn btn-ghost btn-xs" onClick={() => showApprovalDetails(row._id)} disabled={detailsLoading} title="View approval progress"><Eye className="h-3 w-3" />Progress</button>
+                {canApprove && actionableIds.has(row._id) ? <>
+                  <button className="btn btn-success btn-xs" disabled={busy === row._id} onClick={() => decide(row._id, "approve")}><CheckCircle2 className="h-3 w-3" />Approve</button>
+                  <button className="btn btn-error btn-xs" disabled={busy === row._id} onClick={() => decide(row._id, "reject")}><XCircle className="h-3 w-3" />Reject</button>
+                </> : null}
                 {canAllocate && row.status === "APPROVED_AWAITING_VEHICLE" ? <Link className="link link-primary" to={`/requests/${row._id}/allocation`}>Find vehicle</Link> : null}
                 {["PENDING_APPROVAL", "APPROVED", "APPROVED_AWAITING_VEHICLE"].includes(row.status) && (user?.role === "FACULTY_STAFF" || canAllocate) ? <button className="link link-error" onClick={() => cancelRequest(row._id)}>Cancel</button> : null}
               </div>

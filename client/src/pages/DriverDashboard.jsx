@@ -7,7 +7,7 @@ import { api } from "../lib/api.js";
 export default function DriverDashboard() {
   const { data, loading, error, reload } = useApiResource("/trips");
   const activeTrip = data.find((trip) => ["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status));
-  const assignedTrip = activeTrip || data[0];
+  const assignedTrip = activeTrip || data.find((trip) => ["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip.status)) || data.find((trip) => trip.status === "TRIP_COMPLETION_PENDING");
 
   if (loading) return <LoadingState />;
 
@@ -30,6 +30,7 @@ export default function DriverDashboard() {
 
 function TripActionCard({ trip, reload }) {
   const isActive = ["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status);
+  const isCompletionPending = trip.status === "TRIP_COMPLETION_PENDING";
 
   async function reportEmergency() {
     if (!window.confirm("Send an emergency alert to transport operations?")) return;
@@ -63,16 +64,16 @@ function TripActionCard({ trip, reload }) {
     <article className="rounded-xl border border-primary/20 bg-primary/5 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-primary">{isActive ? "Trip in progress" : "Next assigned trip"}</p>
+          <p className="text-sm font-medium text-primary">{isActive ? "Trip in progress" : isCompletionPending ? "Awaiting faculty confirmation" : "Next assigned trip"}</p>
           <h3 className="mt-1 text-lg font-semibold">{trip.destination}</h3>
           <p className="mt-1 text-sm text-slate-600">{trip.vehicleId?.vehicleId || "Vehicle pending"} · {trip.passengerCount} passengers · {trip.source}</p>
         </div>
         <span className="badge badge-primary">{trip.status.replaceAll("_", " ")}</span>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <Link className="btn btn-primary btn-sm" to={`/trips/${trip._id}`}><QrCode className="h-4 w-4" /> {isActive ? "Open trip" : "Verify & start"}</Link>
+        <Link className="btn btn-primary btn-sm" to={`/trips/${trip._id}`}><QrCode className="h-4 w-4" /> {isActive ? "Open trip" : isCompletionPending ? "Open completion QR" : "Verify & start"}</Link>
         {isActive ? <button className="btn btn-secondary btn-sm" onClick={sendLocation}><Navigation className="h-4 w-4" /> Share location</button> : null}
-        <button className="btn btn-error btn-sm" onClick={reportEmergency}><AlertTriangle className="h-4 w-4" /> Emergency</button>
+        {!isCompletionPending ? <button className="btn btn-error btn-sm" onClick={reportEmergency}><AlertTriangle className="h-4 w-4" /> Emergency</button> : null}
       </div>
     </article>
   );

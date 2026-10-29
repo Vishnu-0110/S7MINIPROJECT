@@ -18,22 +18,25 @@ import {
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore.js";
+import { api } from "../lib/api.js";
+import { connectSocket } from "../lib/socket.js";
+import { useScrollLock } from "../hooks/useScrollLock.js";
 
 const nav = [
-  { to: "/", label: "Overview", icon: LayoutDashboard, group: "main" },
+  { to: "/", label: "Overview", icon: LayoutDashboard, group: "main", roles: ["FACULTY_STAFF", "TRANSPORT_ADMIN", "DEPARTMENT_COORDINATOR"] },
   { to: "/driver", label: "My Driving", icon: Bus, group: "main", roles: ["DRIVER"] },
   { to: "/requests", label: "Requests", icon: ClipboardCheck, group: "main" },
   { to: "/request/new", label: "New Request", icon: Bus, group: "main", roles: ["FACULTY_STAFF"] },
-  { to: "/approvals", label: "Approvals", icon: ClipboardCheck, group: "main", roles: ["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"] },
   { to: "/trips", label: "Trips", icon: QrCode, group: "main" },
   { to: "/fuel", label: "Fuel Log", icon: Fuel, group: "main", roles: ["DRIVER"] },
+  { to: "/driver-leaves", label: "Leave Request", icon: FileText, group: "main", roles: ["DRIVER"] },
   { to: "/vehicles", label: "Vehicles", icon: Bus, group: "manage", roles: ["TRANSPORT_ADMIN"] },
   { to: "/drivers", label: "Drivers", icon: Users, group: "manage", roles: ["TRANSPORT_ADMIN"] },
+  { to: "/driver-leaves", label: "Driver Leave Approvals", icon: ClipboardCheck, group: "manage", roles: ["TRANSPORT_ADMIN"] },
   { to: "/maintenance", label: "Maintenance", icon: Wrench, group: "manage", roles: ["TRANSPORT_ADMIN"] },
   { to: "/fuel", label: "Fuel Logs", icon: Fuel, group: "manage", roles: ["TRANSPORT_ADMIN"] },
   { to: "/expenses", label: "Expenses", icon: BarChart3, group: "manage", roles: ["TRANSPORT_ADMIN"] },
   { to: "/tracking", label: "Track Vehicles", icon: Map, group: "more", roles: ["FACULTY_STAFF", "TRANSPORT_ADMIN"] },
-  { to: "/analytics", label: "Analytics", icon: BarChart3, group: "more", roles: ["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"] },
   { to: "/reports", label: "Reports", icon: FileText, group: "more", roles: ["TRANSPORT_ADMIN"] },
   { to: "/emergencies", label: "Emergency Alerts", icon: ShieldAlert, group: "more", roles: ["DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"] },
   { to: "/vehicle-documents", label: "Vehicle Documents", icon: FileText, group: "more", roles: ["TRANSPORT_ADMIN"] },
@@ -50,6 +53,7 @@ export default function Layout() {
   const managementNav = visibleNav.filter((item) => item.group === "manage");
   const moreNav = visibleNav.filter((item) => item.group === "more");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const groupIsActive = (items) => items.some((item) => item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to));
 
   useEffect(() => {
@@ -61,21 +65,34 @@ export default function Layout() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, []);
 
+  useScrollLock(menuOpen);
+
   useEffect(() => {
-    if (!menuOpen) return undefined;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    document.querySelector(".app-main-scroll")?.scrollTo({ top: 0, left: 0 });
+  }, [location.pathname]);
+
+  useEffect(() => {
+    let active = true;
+    api.get("/notifications?limit=100")
+      .then((result) => {
+        if (active) setUnreadCount((result.data || []).filter((notification) => !notification.isRead).length);
+      })
+      .catch(() => undefined);
+    const socket = connectSocket();
+    const onNotification = () => setUnreadCount((count) => count + 1);
+    socket.on("notification:new", onNotification);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      active = false;
+      socket.off("notification:new", onNotification);
     };
-  }, [menuOpen]);
+  }, []);
 
   return (
     <div className="app-shell">
       <div className="drawer h-full min-h-0 overflow-hidden lg:drawer-open">
         <input id="main-drawer" type="checkbox" className="drawer-toggle" checked={menuOpen} onChange={(event) => setMenuOpen(event.target.checked)} />
-        <div className="drawer-content h-full min-h-0 min-w-0 overflow-y-auto overscroll-contain">
-          <header className="sticky top-0 z-20 flex min-h-[72px] items-center justify-between border-b border-slate-200/70 bg-white/80 px-4 py-2 backdrop-blur-xl lg:px-8">
+        <div className="drawer-content flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+          <header className="z-20 flex shrink-0 min-h-[72px] items-center justify-between border-b border-slate-200/70 bg-white/80 px-4 py-2 backdrop-blur-xl lg:px-8">
             <label htmlFor="main-drawer" className="btn btn-square btn-ghost rounded-xl lg:hidden" aria-label="Open menu" aria-expanded={menuOpen}>
               <Bus className="h-5 w-5" />
             </label>
@@ -84,7 +101,7 @@ export default function Layout() {
               <h1 className="truncate text-lg font-bold text-slate-950">Transport management</h1>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
-              <NavLink className="btn btn-square btn-ghost rounded-xl" to="/notifications" aria-label="Notifications"><Bell className="h-5 w-5" /></NavLink>
+              <NavLink className="btn btn-square btn-ghost relative rounded-xl" to="/notifications" aria-label={unreadCount ? `${unreadCount} unread notifications` : "Notifications"}><Bell className="h-5 w-5" />{unreadCount ? <span className="badge badge-primary badge-xs absolute -right-1 -top-1">{unreadCount > 99 ? "99+" : unreadCount}</span> : null}</NavLink>
               <div className="hidden items-center gap-3 border-l border-slate-200 pl-3 sm:flex">
                 <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-primary to-secondary text-sm font-bold text-white">{user?.name?.slice(0, 1)?.toUpperCase() || "U"}</div>
                 <div className="max-w-32">
@@ -95,7 +112,7 @@ export default function Layout() {
               <button className="btn btn-square btn-ghost rounded-xl text-slate-500 hover:bg-error/10 hover:text-error" onClick={() => { clearSession(); navigate("/login"); }} aria-label="Logout"><LogOut className="h-4 w-4" /></button>
             </div>
           </header>
-          <main className="mx-auto w-full min-w-0 max-w-[1800px] p-4 sm:p-6 lg:p-8">
+          <main className="app-main-scroll mx-auto min-h-0 w-full min-w-0 max-w-[1800px] flex-1 p-4 sm:p-6 lg:p-8">
             <Outlet />
           </main>
         </div>

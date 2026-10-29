@@ -14,3 +14,8 @@ export async function notify(userId, title, message, type = "INFO", metadata = {
   }
   return notification;
 }
+
+export async function notifyMany(userIds, title, message, type = "INFO", metadata = {}) {
+  const uniqueUserIds = [...new Set(userIds.filter(Boolean).map(String))];
+  return Promise.all(uniqueUserIds.map((userId) => notify(userId, title, message, type, metadata)));
+}

@@ -4,7 +4,8 @@ import { humanId } from "../utils/id.js";
 import { parsePagination, paginationPayload } from "../utils/pagination.js";
 import { runSmartAllocation } from "../services/allocationService.js";
 import { reassignTrip } from "../services/tripService.js";
-import { notify } from "../services/notificationService.js";
+import { notifyMany } from "../services/notificationService.js";
+import { ensureAllRoutineServiceSchedules } from "../services/maintenanceService.js";
 
 function listFor(Model, baseQuery = {}) {
   return async (req, res) => {
@@ -24,6 +25,7 @@ function listFor(Model, baseQuery = {}) {
 export async function listMaintenance(req, res) {
   const { page, limit, skip } = parsePagination(req.query);
   const now = new Date();
+  await ensureAllRoutineServiceSchedules();
   const [maintenance, expiredDocuments] = await Promise.all([
     Maintenance.find().populate("vehicleId", "vehicleId registrationNumber type").sort({ createdAt: -1 }).lean(),
     VehicleDocument.find({ expiresAt: { $lte: now } })
@@ -73,19 +75,27 @@ export async function listEmergencies(req, res) {
   return listFor(EmergencyAlert)(req, res);
 }
 
-async function incidentRecipients(trip) {
-  return User.find({
+async function notifyTripParticipants(trip, title, message, type = "EMERGENCY", metadata = {}) {
+  const driver = await Driver.findById(trip.driverId).select("userId");
+  const managers = await User.find({
     isActive: true,
     $or: [
       { role: "TRANSPORT_ADMIN" },
       { role: "DEPARTMENT_COORDINATOR", departmentId: trip.departmentId }
     ]
   }).select("_id");
+  await notifyMany(
+    [trip.facultyId, driver?.userId, ...managers.map((manager) => manager._id)],
+    title,
+    message,
+    type,
+    { tripId: trip._id, ...metadata }
+  );
 }
 
-async function notifyIncident(trip, alert, title, message) {
-  const recipients = await incidentRecipients(trip);
-  await Promise.all(recipients.map((user) => notify(user._id, title, message, "EMERGENCY", { incidentId: alert._id, tripId: trip._id })));
+async function notifyFleetAdmins(title, message, type, metadata = {}) {
+  const admins = await User.find({ isActive: true, role: "TRANSPORT_ADMIN" }).select("_id");
+  await notifyMany(admins.map((admin) => admin._id), title, message, type, metadata);
 }
 
 async function assertIncidentManager(alert, user) {
@@ -125,7 +135,9 @@ export async function createFuel(req, res) {
     error.status = 400;
     throw error;
   }
-  return ok(res, "Fuel logged", await FuelLog.create({ ...req.body, quantity, odometerReading, fuelLogId: humanId("FUEL"), totalAmount, enteredBy: req.user._id }), 201);
+  const fuelLog = await FuelLog.create({ ...req.body, quantity, odometerReading, fuelLogId: humanId("FUEL"), totalAmount, enteredBy: req.user._id });
+  await notifyFleetAdmins("Fuel log recorded", `Fuel log ${fuelLog.fuelLogId} was recorded for a vehicle.`, "FUEL", { fuelLogId: fuelLog._id, vehicleId: fuelLog.vehicleId });
+  return ok(res, "Fuel logged", fuelLog, 201);
 }
 
 export async function markNotificationRead(req, res) {
@@ -142,6 +154,11 @@ export async function markNotificationRead(req, res) {
   return ok(res, "Notification marked as read", notification);
 }
 
+export async function markAllNotificationsRead(req, res) {
+  const result = await Notification.updateMany({ userId: req.user._id, isRead: false }, { isRead: true });
+  return ok(res, "All notifications marked as read", { updated: result.modifiedCount });
+}
+
 export async function createExpense(req, res) {
   const amount = Number(req.body.amount);
   if (!Number.isFinite(amount) || amount < 0) {
@@ -149,7 +166,9 @@ export async function createExpense(req, res) {
     error.status = 400;
     throw error;
   }
-  return ok(res, "Expense logged", await Expense.create({ ...req.body, amount, expenseId: humanId("EXP"), enteredBy: req.user._id }), 201);
+  const expense = await Expense.create({ ...req.body, amount, expenseId: humanId("EXP"), enteredBy: req.user._id });
+  await notifyFleetAdmins("Expense recorded", `Expense ${expense.expenseId} was recorded for the fleet.`, "EXPENSE", { expenseId: expense._id, vehicleId: expense.vehicleId });
+  return ok(res, "Expense logged", expense, 201);
 }
 
 export async function createMaintenance(req, res) {
@@ -158,7 +177,9 @@ export async function createMaintenance(req, res) {
     error.status = 400;
     throw error;
   }
-  return ok(res, "Maintenance logged", await Maintenance.create({ ...req.body, maintenanceId: humanId("MAIN") }), 201);
+  const maintenance = await Maintenance.create({ ...req.body, maintenanceId: humanId("MAIN") });
+  await notifyFleetAdmins("Maintenance recorded", `Maintenance ${maintenance.maintenanceId} was recorded for a vehicle.`, "MAINTENANCE", { maintenanceId: maintenance._id, vehicleId: maintenance.vehicleId });
+  return ok(res, "Maintenance logged", maintenance, 201);
 }
 
 export async function raiseEmergency(req, res) {
@@ -201,8 +222,7 @@ export async function raiseEmergency(req, res) {
   });
   req.app.get("io")?.to("admin-room").emit("emergency:new", alert);
   req.app.get("io")?.to(`coordinator-room-${trip.departmentId}`).emit("emergency:new", alert);
-  await notifyIncident(trip, alert, "Emergency alert", `Emergency reported for trip ${trip.tripId}.`, "EMERGENCY");
-  await notify(req.user._id, "Emergency alert sent", "The Transport Administrator and Department Coordinator have been notified.", "EMERGENCY", { incidentId: alert._id, tripId: trip._id });
+  await notifyTripParticipants(trip, "Emergency alert", `Emergency reported for trip ${trip.tripId}. Transport operations have been notified.`, "EMERGENCY", { incidentId: alert._id });
   return ok(res, "Emergency alert sent successfully. The Transport Administrator and Department Coordinator have been notified.", alert, 201);
 }
 
@@ -221,8 +241,9 @@ export async function acknowledgeEmergency(req, res) {
   alert.events.push({ action: "ACKNOWLEDGED", actorId: req.user._id, note: req.body.note });
   await alert.save();
   req.app.get("io")?.to("admin-room").emit("emergency:updated", alert);
-  const trip = await Trip.findById(alert.tripId).select("departmentId");
+  const trip = await Trip.findById(alert.tripId).select("departmentId facultyId driverId tripId");
   if (trip) req.app.get("io")?.to(`coordinator-room-${trip.departmentId}`).emit("emergency:updated", alert);
+  if (trip) await notifyTripParticipants(trip, "Emergency acknowledged", `Emergency alert for trip ${trip.tripId} has been acknowledged and is being handled.`, "EMERGENCY", { incidentId: alert._id });
   return ok(res, "Emergency acknowledged", alert);
 }
 
@@ -249,8 +270,9 @@ export async function resolveEmergency(req, res) {
   alert.events.push({ action: "RESOLVED", actorId: req.user._id, note: req.body.note });
   await alert.save();
   req.app.get("io")?.to("admin-room").emit("emergency:updated", alert);
-  const trip = await Trip.findById(alert.tripId).select("departmentId");
+  const trip = await Trip.findById(alert.tripId).select("departmentId facultyId driverId tripId");
   if (trip) req.app.get("io")?.to(`coordinator-room-${trip.departmentId}`).emit("emergency:updated", alert);
+  if (trip) await notifyTripParticipants(trip, "Emergency resolved", `Emergency alert for trip ${trip.tripId} has been resolved.`, "EMERGENCY", { incidentId: alert._id });
   return ok(res, "Emergency resolved", alert);
 }
 
@@ -294,7 +316,7 @@ export async function breakdown(req, res) {
     alert.events.push({ action: "REPLACEMENT_UNAVAILABLE", actorId: req.user._id, note: "No eligible replacement could be reserved." });
     await alert.save();
   }
-  await notifyIncident(trip, alert, "Bus breakdown reported", replacement ? `Replacement assigned for trip ${trip.tripId}.` : `No replacement is currently available for trip ${trip.tripId}.`);
+  await notifyTripParticipants(trip, "Breakdown reported", replacement ? `A breakdown was reported for trip ${trip.tripId}; a replacement assignment is ready.` : `A breakdown was reported for trip ${trip.tripId}; no replacement is currently available.`, "EMERGENCY", { incidentId: alert._id });
   req.app.get("io")?.to("admin-room").emit("trip:reallocated", { alert, replacement, alternatives });
   req.app.get("io")?.to(`coordinator-room-${trip.departmentId}`).emit("trip:reallocated", { alert, replacement, alternatives });
   return ok(res, replacement ? "Breakdown reported and replacement assigned" : "Breakdown reported; no replacement is currently available", { alert, replacement, alternatives }, 201);

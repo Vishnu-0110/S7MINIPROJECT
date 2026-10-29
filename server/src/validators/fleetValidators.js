@@ -2,9 +2,8 @@ import { z } from "zod";
 
 export const vehicleSchema = z.object({
   body: z.object({
-    vehicleId: z.string().min(2),
     registrationNumber: z.string().min(2),
-    name: z.string().min(2),
+    name: z.string().min(2).optional(),
     type: z.string().min(2),
     capacity: z.coerce.number().int().positive(),
     facilities: z.array(z.string().trim().min(1)).optional().default([]),
@@ -20,11 +19,9 @@ export const vehicleSchema = z.object({
 
 export const driverSchema = z.object({
   body: z.object({
-    userId: z.string().min(1),
-    driverId: z.string().min(2),
-    licenseNumber: z.string().min(2),
-    phone: z.string().optional(),
-    assignedVehicleTypes: z.array(z.string()).optional().default([]),
-    status: z.string().optional()
+    name: z.string().trim().min(2),
+    licenseNumber: z.string().trim().min(2),
+    phone: z.string().trim().min(5),
+    address: z.string().trim().min(3)
   })
 });

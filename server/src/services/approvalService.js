@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { Approval, User, VehicleRequest } from "../models/index.js";
 import { humanId } from "../utils/id.js";
 import { audit } from "./auditService.js";
-import { notify } from "./notificationService.js";
+import { notify, notifyMany } from "./notificationService.js";
 
 export function approvalChainForTripType(tripType) {
   return ["DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"];
@@ -104,9 +104,21 @@ export async function decideApproval({ requestId, actor, status, comments }) {
     });
     await session.commitTransaction();
 
-    await notify(request.facultyId, "Request updated", `Your request ${request.requestId} is ${request.status.replaceAll("_", " ")}.`, "REQUEST", {
-      requestId: request._id
-    });
+    const participants = await User.find({
+      isActive: true,
+      $or: [
+        { role: "TRANSPORT_ADMIN" },
+        { role: "DEPARTMENT_COORDINATOR", departmentId: request.departmentId }
+      ]
+    }).select("_id");
+    const decision = status === "APPROVED" ? "approved" : "rejected";
+    await notifyMany(
+      [request.facultyId, actor._id, ...participants.map((participant) => participant._id)],
+      `Request ${decision}`,
+      `Request ${request.requestId} was ${decision}. Current status: ${request.status.replaceAll("_", " ")}.`,
+      "REQUEST",
+      { requestId: request._id, approvalVersion: request.approvalVersion }
+    );
     return request;
   } catch (error) {
     await session.abortTransaction();

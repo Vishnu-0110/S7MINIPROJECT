@@ -11,6 +11,7 @@ import {
   listGps,
   listMaintenance,
   markNotificationRead,
+  markAllNotificationsRead,
   listNotifications,
   raiseEmergency,
   resolveEmergency,
@@ -32,6 +33,7 @@ operationRoutes.get("/expenses", requireRoles("TRANSPORT_ADMIN"), asyncHandler(l
 operationRoutes.post("/expenses", requireRoles("TRANSPORT_ADMIN"), asyncHandler(createExpense));
 operationRoutes.get("/notifications", asyncHandler(listNotifications));
 operationRoutes.patch("/notifications/:id/read", asyncHandler(markNotificationRead));
+operationRoutes.patch("/notifications/read-all", asyncHandler(markAllNotificationsRead));
 operationRoutes.get("/gps", requireRoles("TRANSPORT_ADMIN"), asyncHandler(listGps));
 operationRoutes.get("/emergencies", requireRoles("FACULTY_STAFF", "DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"), asyncHandler(listEmergencies));
 operationRoutes.post("/emergencies", requireRoles("FACULTY_STAFF", "DRIVER", "TRANSPORT_ADMIN"), validate(emergencySchema), asyncHandler(raiseEmergency));

@@ -3,8 +3,8 @@ import { PRIORITIES, TRIP_TYPES } from "../models/index.js";
 
 const requestBodySchema = z.object({
     tripType: z.enum(TRIP_TYPES),
-    purpose: z.string().min(3),
-    source: z.string().min(2),
+    purpose: z.string().min(3).optional(),
+    source: z.string().min(2).optional(),
     destination: z.string().min(2),
     waypoints: z.array(z.string()).optional().default([]),
     passengerCount: z.coerce.number().int().positive(),

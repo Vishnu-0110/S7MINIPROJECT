@@ -1,4 +1,4 @@
-import { Driver, Maintenance, Trip, Vehicle, VehicleAllocation } from "../models/index.js";
+import { Driver, DriverLeave, Maintenance, Trip, Vehicle, VehicleAllocation } from "../models/index.js";
 import { humanId } from "../utils/id.js";
 
 const defaultWeights = {
@@ -53,6 +53,15 @@ export async function driverHasScheduleConflict(driverId, start, end) {
       scheduledEndTime: { $gt: start }
     })
   );
+}
+
+export async function driverHasApprovedLeave(driverId, start, end) {
+  return Boolean(await DriverLeave.exists({
+    driverId,
+    status: "APPROVED",
+    fromDate: { $lte: end },
+    toDate: { $gte: start }
+  }));
 }
 
 export async function scoreVehicleForRequest({ request, vehicle, driver, maintenanceConflict, vehicleConflict, driverConflict, weights }) {
@@ -112,13 +121,11 @@ export async function runSmartAllocation(request, { excludeVehicleIds = [] } = {
       status: { $in: ["SCHEDULED", "OVERDUE", "BREAKDOWN"] },
       serviceDate: { $gte: start, $lte: end }
     });
-    const candidates = drivers
-      .filter((candidate) => !candidate.assignedVehicleTypes?.length || candidate.assignedVehicleTypes.includes(vehicle.type))
-      .sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    const candidates = [...drivers].sort((a, b) => (b.rating || 0) - (a.rating || 0));
     let driver = null;
     let driverConflict = true;
     for (const candidate of candidates) {
-      if (!(await driverHasScheduleConflict(candidate._id, start, end))) {
+      if (!(await driverHasScheduleConflict(candidate._id, start, end)) && !(await driverHasApprovedLeave(candidate._id, start, end))) {
         driver = candidate;
         driverConflict = false;
         break;

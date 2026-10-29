@@ -1,5 +1,6 @@
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import DataTable from "../components/DataTable.jsx";
 import LoadingState from "../components/LoadingState.jsx";
 import { useApiResource } from "../hooks/useApiResource.js";
@@ -13,43 +14,52 @@ const userTypes = [
   { role: "TRANSPORT_ADMIN", label: "Transport Admin" }
 ];
 
-const userDepartments = ["CSE", "ECE", "EEE", "CSD", "AIDS", "AIML", "ISE"];
-
 const config = {
   vehicles: {
     title: "Vehicle Management",
-    defaults: { fuelType: "Diesel", fuelLevel: 75, mileageKmPerLiter: 4, currentKM: 0 },
+    defaults: { fuelType: "Diesel", currentKM: 0 },
     columns: [
       { key: "vehicleId", label: "Vehicle" },
       { key: "registrationNumber", label: "Registration" },
+      { key: "name", label: "Name" },
       { key: "type", label: "Type" },
       { key: "capacity", label: "Capacity" },
-      { key: "status", label: "Status" }
+      { key: "facilities", label: "Facilities", render: (row) => row.facilities?.length ? row.facilities.join(", ") : "—" },
+      { key: "fuelType", label: "Fuel Type" },
+      { key: "currentKM", label: "Current Odometer", render: (row) => row.currentKM !== undefined ? `${row.currentKM} km` : "—" },
+      { key: "nextServiceKM", label: "Service Due", render: (row) => row.nextServiceKM !== undefined ? `${row.nextServiceKM} km` : "—" },
+      { key: "condition", label: "Condition" },
+      { key: "status", label: "Status" },
+      { key: "createdAt", label: "Added", render: (row) => row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "—" },
+      { key: "history", label: "Details", render: (row) => <Link className="link link-primary" to={`/vehicles/${row._id}/history`}>View history</Link> }
     ],
-    fields: ["vehicleId", "registrationNumber", "name", "type", "capacity", "facilities", "fuelType", "fuelLevel", "mileageKmPerLiter", "currentKM"]
+    fields: ["registrationNumber", "type", "capacity", "facilities", "fuelType", "currentKM"],
+    selects: { type: "vehicleTypes" }
   },
   drivers: {
     title: "Driver Management",
-    defaults: { assignedVehicleTypes: [] },
+    defaults: {},
     columns: [
       { key: "driverId", label: "Driver" },
+      { key: "userId", label: "Name", render: (row) => row.userId?.name || "—" },
+      { key: "userId", label: "Email", render: (row) => row.userId?.email || "—" },
       { key: "licenseNumber", label: "License" },
+      { key: "phone", label: "Phone" },
       { key: "status", label: "Status" },
-      { key: "rating", label: "Rating" }
+      { key: "rating", label: "Rating" },
+      { key: "history", label: "Details", render: (row) => <Link className="link link-primary" to={`/drivers/${row._id}/history`}>View history</Link> }
     ],
-    fields: ["userId", "driverId", "licenseNumber", "phone"],
-    selects: { userId: "drivers" }
+    fields: ["name", "licenseNumber", "phone", "address"]
   },
   users: {
     title: "User Management",
-    defaults: { role: "FACULTY_STAFF", password: "SmartFleet@123", department: "" },
+    defaults: { role: "FACULTY_STAFF", password: "SmartFleet@123" },
     columns: [
       { key: "name", label: "Name" },
       { key: "email", label: "Email" },
-      { key: "departmentId", label: "Department", render: (row) => row.departmentId?.code || "—" },
       { key: "isActive", label: "Active", render: (row) => (row.isActive ? "Yes" : "No") }
     ],
-    fields: ["name", "email", "password", "department", "phone"]
+    fields: ["name", "email", "password", "phone"]
   },
   departments: {
     title: "Department Management",
@@ -63,13 +73,15 @@ const config = {
     selects: { coordinatorId: "coordinators" }
   },
   "vehicle-documents": {
-    title: "Vehicle Documents",
+    title: "Vehicle Document History",
     defaults: {},
     columns: [
       { key: "type", label: "Document Type" },
       { key: "vehicleType", label: "Vehicle Type" },
       { key: "vehicleId", label: "Vehicle Number", render: (row) => row.vehicleId?.registrationNumber || "—" },
-      { key: "expiresAt", label: "Expiry Date", render: (row) => row.expiresAt ? new Date(row.expiresAt).toLocaleDateString() : "—" }
+      { key: "expiresAt", label: "Expiry Date", render: (row) => row.expiresAt ? new Date(row.expiresAt).toLocaleDateString() : "—" },
+      { key: "createdAt", label: "Added", render: (row) => row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "—" },
+      { key: "status", label: "Status", render: (row) => new Date(row.expiresAt) < new Date() ? "Expired" : "Current" }
     ],
     fields: ["type", "vehicleType", "vehicleNumber", "expiresAt"],
     selects: { type: "documentTypes", vehicleType: "vehicleTypes" }
@@ -82,27 +94,33 @@ export default function ManagementPage({ resource }) {
   const [form, setForm] = useState(cfg.defaults || {});
   const [message, setMessage] = useState("");
   const [optionsError, setOptionsError] = useState("");
-  const [options, setOptions] = useState({ vehicles: [], users: [], departments: [] });
+  const [options, setOptions] = useState({ vehicles: [], users: [], drivers: [] });
   const [selectedUserType, setSelectedUserType] = useState("FACULTY_STAFF");
 
   useEffect(() => {
-    Promise.all([api.get("/vehicles?limit=100"), api.get("/users?limit=100"), api.get("/departments?limit=100")])
-      .then(([vehicles, users, departments]) => setOptions({ vehicles: vehicles.data || [], users: users.data || [], departments: departments.data || [] }))
+    Promise.all([api.get("/vehicles?limit=100"), api.get("/users?limit=100"), api.get("/drivers?limit=100")])
+      .then(([vehicles, users, drivers]) => setOptions({ vehicles: vehicles.data || [], users: users.data || [], drivers: drivers.data || [] }))
       .catch((err) => setOptionsError(err.message || "Could not load form options."));
   }, []);
 
   async function submit(event) {
     event.preventDefault();
     try {
-      const payload = resource === "users"
-        ? { ...form, role: selectedUserType, ...(selectedUserType === "DRIVER" ? { department: undefined, departmentId: undefined } : {}) }
+      const isDriverUser = resource === "users" && selectedUserType === "DRIVER";
+      const payload = resource === "users" && !isDriverUser
+        ? { ...form, role: selectedUserType, department: undefined, departmentId: undefined }
         : resource === "vehicles" && typeof form.facilities === "string"
         ? { ...form, facilities: form.facilities.split(",").map((value) => value.trim()).filter(Boolean) }
         : form;
-      await api.post(`/${resource}`, payload);
-      setForm(resource === "users" ? { ...cfg.defaults, role: selectedUserType } : cfg.defaults || {});
-      setMessage("Saved");
+      const result = await api.post(isDriverUser ? "/drivers" : `/${resource}`, payload);
+      setForm(resource === "users" ? (isDriverUser ? {} : { ...cfg.defaults, role: selectedUserType }) : cfg.defaults || {});
+      const credentials = resource === "drivers" || isDriverUser ? result.data?.credentials : null;
+      setMessage(credentials ? `Driver added. Login: ${credentials.email} | Default password: ${credentials.password}` : "Saved");
       await reload();
+      if (isDriverUser) {
+        const drivers = await api.get("/drivers?limit=100");
+        setOptions((current) => ({ ...current, drivers: drivers.data || [] }));
+      }
     } catch (err) {
       setMessage(err.message);
     }
@@ -111,25 +129,31 @@ export default function ManagementPage({ resource }) {
   if (loading) return <LoadingState />;
 
   return (
-    <section className="responsive-panel-grid">
-      <div className="space-y-4">
+    <section className="responsive-panel-grid workspace-grid">
+      <div className="flex min-h-0 flex-col gap-4">
         <h2 className="text-lg font-semibold">{cfg.title}</h2>
         {error ? <div className="alert alert-error">{error}</div> : null}
         {optionsError ? <div className="alert alert-warning">Some selection lists could not be loaded: {optionsError}</div> : null}
         {resource === "users" ? <>
           <label className="form-control max-w-sm">
             <span className="label-text mb-1 font-medium">What type of user do you want?</span>
-            <select className="select select-bordered w-full" value={selectedUserType} onChange={(event) => setSelectedUserType(event.target.value)}>
+            <select className="select select-bordered w-full" value={selectedUserType} onChange={(event) => {
+              const role = event.target.value;
+              setSelectedUserType(role);
+              setForm(role === "DRIVER" ? {} : { ...cfg.defaults, role });
+              setMessage("");
+            }}>
               {userTypes.map((type) => <option key={type.role} value={type.role}>{type.label}</option>)}
             </select>
           </label>
-          <DataTable rows={data.filter((user) => user.role === selectedUserType)} columns={cfg.columns} />
-        </> : <DataTable rows={data} columns={cfg.columns} />}
+          <div className="workspace-list-scroll flex-1"><DataTable rows={selectedUserType === "DRIVER" ? options.drivers : data.filter((user) => user.role === selectedUserType)} columns={selectedUserType === "DRIVER" ? config.drivers.columns : cfg.columns} /></div>
+        </> : <div className="workspace-list-scroll flex-1"><DataTable rows={data} columns={cfg.columns} /></div>}
       </div>
-      <aside className="rounded-lg border border-slate-200 bg-white p-5">
+      <aside className="workspace-side-panel rounded-lg border border-slate-200 bg-white p-5">
         <h3 className="font-semibold">{resource === "users" ? `Add ${userTypes.find((type) => type.role === selectedUserType)?.label}` : resource === "vehicle-documents" ? "Add vehicle document" : `Add ${resource.slice(0, -1)}`}</h3>
         <form className="mt-4 space-y-3" onSubmit={submit}>
-          {[...cfg.fields.filter((field) => !(resource === "users" && selectedUserType === "DRIVER" && field === "department")), ...(resource === "users" && selectedUserType === "DRIVER" ? ["licenseNumber"] : [])].map((field) => <ManagementField key={field} field={field} kind={resource === "users" && field === "department" ? "userDepartments" : cfg.selects?.[field]} form={form} setForm={setForm} options={options} />)}
+          {(resource === "drivers" || (resource === "users" && selectedUserType === "DRIVER")) ? <p className="text-sm text-slate-500">A BIT account will be created automatically using the driver’s name and the default password SmartFleet@123.</p> : null}
+          {(resource === "users" && selectedUserType === "DRIVER" ? config.drivers.fields : cfg.fields).map((field) => <ManagementField key={field} field={field} kind={cfg.selects?.[field]} form={form} setForm={setForm} options={options} />)}
           {message ? <p className="text-sm text-slate-500">{message}</p> : null}
           <button className="btn btn-primary w-full">
             <Plus className="h-4 w-4" />
@@ -146,8 +170,6 @@ function ManagementField({ field, kind, form, setForm, options }) {
   const update = (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
   const choices = {
     vehicles: options.vehicles.map((item) => ({ value: item._id, label: `${item.vehicleId} — ${item.registrationNumber}` })),
-    departments: options.departments.map((item) => ({ value: item._id, label: `${item.code} — ${item.name}` })),
-    userDepartments: userDepartments.map((code) => ({ value: code, label: code })),
     drivers: options.users.filter((item) => item.role === "DRIVER").map((item) => ({ value: item._id, label: `${item.name} (${item.email})` })),
     coordinators: options.users.filter((item) => item.role === "DEPARTMENT_COORDINATOR").map((item) => ({ value: item._id, label: `${item.name} (${item.email})` })),
     documentTypes: [
@@ -156,15 +178,16 @@ function ManagementField({ field, kind, form, setForm, options }) {
       { value: "FC", label: "FC" },
       { value: "POLLUTION_CERTIFICATE", label: "Pollution Certificate" }
     ],
-    vehicleTypes: [...new Set(["Bus", "Van", ...options.vehicles.map((item) => item.type).filter(Boolean)])].map((item) => ({ value: item, label: item }))
+    vehicleTypes: ["Bus", "Van"].map((item) => ({ value: item, label: item }))
   };
   if (kind) {
-    const label = field === "type" ? "Document type" : field === "vehicleType" ? "Vehicle type" : field;
+    const label = kind === "documentTypes" ? "Document type" : field === "type" || field === "vehicleType" ? "Vehicle type" : field;
     return <label className="form-control w-full"><span className="label-text mb-1 capitalize">{label}</span><select className="select select-bordered w-full" value={value} onChange={update} required={["type", "vehicleType"].includes(field)}><option value="">Select {label.toLowerCase()}</option>{choices[kind].map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>;
   }
   const type = ["capacity", "fuelLevel", "mileageKmPerLiter", "currentKM"].includes(field) ? "number" : field === "expiresAt" ? "date" : "text";
   if (field === "password") return <label className="form-control w-full"><span className="label-text mb-1 capitalize">Password</span><PasswordField className="input input-bordered w-full" placeholder={field} value={value} onChange={update} required /></label>;
   const inputType = field === "email" ? "email" : type;
   const label = field === "expiresAt" ? "Expiry date" : field === "vehicleNumber" ? "Vehicle number" : field;
-  return <label className="form-control w-full"><span className="label-text mb-1 capitalize">{label}</span><input className="input input-bordered w-full" type={inputType} min={type === "number" ? "0" : undefined} placeholder={field === "facilities" ? "facilities, separated by commas" : field === "vehicleNumber" ? "Enter registration number" : field} value={value} onChange={update} required={field === "name" || field === "email" || field === "licenseNumber" || field === "expiresAt" || field === "vehicleNumber"} /></label>;
+  if (field === "address") return <label className="form-control w-full"><span className="label-text mb-1 capitalize">Address</span><textarea className="textarea textarea-bordered w-full" placeholder="Address" value={value} onChange={update} required /></label>;
+  return <label className="form-control w-full"><span className="label-text mb-1 capitalize">{label}</span><input className="input input-bordered w-full" type={inputType} min={type === "number" ? "0" : undefined} placeholder={field === "facilities" ? "facilities, separated by commas" : field === "vehicleNumber" ? "Enter registration number" : field} value={value} onChange={update} required={field === "name" || field === "email" || field === "licenseNumber" || field === "phone" || field === "expiresAt" || field === "vehicleNumber"} /></label>;
 }

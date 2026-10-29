@@ -13,9 +13,9 @@ import { fleetRoutes } from "./routes/fleetRoutes.js";
 import { requestRoutes } from "./routes/requestRoutes.js";
 import { tripRoutes } from "./routes/tripRoutes.js";
 import { operationRoutes } from "./routes/operationRoutes.js";
-import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { aiRoutes } from "./routes/aiRoutes.js";
 import { reportRoutes } from "./routes/reportRoutes.js";
+import { driverLeaveRoutes } from "./routes/driverLeaveRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,9 +48,9 @@ export function createApp() {
   app.use("/api/requests", requestRoutes);
   app.use("/api/trips", tripRoutes);
   app.use("/api", operationRoutes);
-  app.use("/api/analytics", analyticsRoutes);
   app.use("/api/ai", aiRoutes);
   app.use("/api/reports", reportRoutes);
+  app.use("/api/driver-leaves", driverLeaveRoutes);
 
   app.use(notFound);
   app.use(errorHandler);

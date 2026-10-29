@@ -7,6 +7,7 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "seed": "node src/seed/seed.js",
+    "seed:vehicles": "node src/scripts/seedSampleVehicles.js",
     "reset:keep-users": "node src/scripts/resetKeepUsers.js --confirm",
     "test": "node --test \"src/**/*.test.js\""
   },

@@ -71,17 +71,38 @@ async function seed() {
 
   const vehicles = await Vehicle.bulkWrite(
     [
-      { vehicleId: "BUS-02", registrationNumber: "TN-33-BIT-0202", name: "BIT Bus 02", type: "Bus", capacity: 40, fuelLevel: 82, mileageKmPerLiter: 4.2, currentKM: 32450, condition: "GOOD", status: "AVAILABLE", nextServiceKM: 36000 },
-      { vehicleId: "BUS-05", registrationNumber: "TN-33-BIT-0505", name: "BIT Bus 05", type: "Bus", capacity: 50, fuelLevel: 68, mileageKmPerLiter: 3.8, currentKM: 41800, condition: "GOOD", status: "AVAILABLE", nextServiceKM: 45000 },
-      { vehicleId: "VAN-03", registrationNumber: "TN-33-BIT-0303", name: "BIT Van 03", type: "Van", capacity: 18, fuelLevel: 72, mileageKmPerLiter: 8.2, currentKM: 18800, condition: "EXCELLENT", status: "AVAILABLE", nextServiceKM: 22000 },
-      { vehicleId: "BUS-M1", registrationNumber: "TN-33-BIT-9001", name: "Maintenance Bus", type: "Bus", capacity: 45, fuelLevel: 40, mileageKmPerLiter: 3.5, currentKM: 62000, condition: "FAIR", status: "MAINTENANCE", nextServiceKM: 62000 }
+      {
+        vehicleId: "BUS-30", registrationNumber: "TN-33-BIT-1030", name: "BIT City Shuttle", type: "Bus", capacity: 30,
+        facilities: ["Air conditioning", "First-aid kit", "GPS tracking"], fuelType: "Diesel", currentKM: 18450,
+        condition: "EXCELLENT", status: "AVAILABLE", lastServiceDate: new Date("2026-08-15"), nextServiceKM: 24000
+      },
+      {
+        vehicleId: "BUS-60", registrationNumber: "TN-33-BIT-1060", name: "BIT Grand Tourer", type: "Bus", capacity: 60,
+        facilities: ["Air conditioning", "Luggage storage", "First-aid kit", "GPS tracking"], fuelType: "Diesel", currentKM: 32780,
+        condition: "GOOD", status: "AVAILABLE", lastServiceDate: new Date("2026-07-20"), nextServiceKM: 36000
+      },
+      {
+        vehicleId: "BUS-45", registrationNumber: "TN-33-BIT-1045", name: "BIT Academic Express", type: "Bus", capacity: 45,
+        facilities: ["Air conditioning", "PA system", "First-aid kit"], fuelType: "Diesel", currentKM: 25600,
+        condition: "GOOD", status: "AVAILABLE", lastServiceDate: new Date("2026-09-01"), nextServiceKM: 30000
+      },
+      {
+        vehicleId: "BUS-55", registrationNumber: "TN-33-BIT-1055", name: "BIT Event Coach", type: "Bus", capacity: 55,
+        facilities: ["Air conditioning", "Luggage storage", "Wheelchair access", "GPS tracking"], fuelType: "Diesel", currentKM: 41800,
+        condition: "GOOD", status: "AVAILABLE", lastServiceDate: new Date("2026-09-10"), nextServiceKM: 42000
+      },
+      {
+        vehicleId: "VAN-42", registrationNumber: "TN-33-BIT-1042", name: "BIT Multi-Purpose Van", type: "Van", capacity: 42,
+        facilities: ["Air conditioning", "First-aid kit", "GPS tracking"], fuelType: "Diesel", currentKM: 11900,
+        condition: "EXCELLENT", status: "AVAILABLE", lastServiceDate: new Date("2026-10-05"), nextServiceKM: 18000
+      }
     ].map((vehicle) => ({
       updateOne: { filter: { vehicleId: vehicle.vehicleId }, update: vehicle, upsert: true }
     }))
   );
 
-  const bus02 = await Vehicle.findOne({ vehicleId: "BUS-02" });
-  const busM1 = await Vehicle.findOne({ vehicleId: "BUS-M1" });
+  const bus02 = await Vehicle.findOne({ vehicleId: "BUS-30" });
+  const busM1 = await Vehicle.findOne({ vehicleId: "BUS-55" });
   const driver = await Driver.findOneAndUpdate(
     { driverId: "DRV-001" },
     {
@@ -90,8 +111,7 @@ async function seed() {
       licenseNumber: "DL-TN-BIT-001",
       phone: "9999999999",
       assignedVehicleTypes: ["Bus", "Van"],
-      status: "AVAILABLE",
-      rating: 4.8
+      status: "AVAILABLE"
     },
     { upsert: true, new: true }
   );
