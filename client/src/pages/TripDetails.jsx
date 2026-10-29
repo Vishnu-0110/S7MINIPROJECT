@@ -92,7 +92,12 @@ export default function TripDetails() {
   }, [id, user.role]);
 
   useEffect(() => {
-    if (user.role !== "DRIVER" || startStep !== "scan" || !["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip?.status)) return undefined;
+    // Replacement drivers do not re-enter the original odometer reading. Their
+    // scanner is visible immediately, so initialise it even though startStep
+    // remains "kilometre" from the original trip flow.
+    const canScan = ["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip?.status);
+    const shouldOpenScanner = trip?.status !== "SCHEDULED" || startStep === "scan";
+    if (user.role !== "DRIVER" || !canScan || !shouldOpenScanner) return undefined;
     const scanner = new Html5Qrcode("qr-reader");
     scannerRef.current = scanner;
     setDriverCameraState("idle");
