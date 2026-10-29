@@ -1,7 +1,7 @@
 import { Driver, Trip, VehicleRequest } from "../models/index.js";
 import { ApiError, ok } from "../utils/apiResponse.js";
 import { parsePagination, paginationPayload } from "../utils/pagination.js";
-import { completeTrip, createTripFromAssignment, generateCompletionQr, generateTripQr, requestTripCompletion, saveGps, startTrip, verifyQr } from "../services/tripService.js";
+import { cancelScheduledTrip, completeTrip, createTripFromAssignment, generateCompletionQr, generateTripQr, requestTripCompletion, saveGps, startTrip, verifyQr } from "../services/tripService.js";
 import { indiaDayRange, isTodayInIndia } from "../utils/indiaTime.js";
 
 export async function assignTrip(req, res) {
@@ -119,6 +119,10 @@ export async function completionQr(req, res) {
 
 export async function completeTripAction(req, res) {
   return ok(res, "Trip completed", await completeTrip({ tripId: req.params.id, actor: req.user, ...req.body }));
+}
+
+export async function cancelTripAction(req, res) {
+  return ok(res, "Trip assignment cancelled. The vehicle and driver are available again.", await cancelScheduledTrip({ tripId: req.params.id, actor: req.user, reason: req.body?.reason?.trim() }));
 }
 
 export async function gpsAction(req, res) {

@@ -41,10 +41,12 @@ export default function Dashboard() {
     socket.on("notification:new", load);
     socket.on("trip:started", load);
     socket.on("trip:completed", load);
+    socket.on("trip:cancelled", load);
     return () => {
       socket.off("notification:new", load);
       socket.off("trip:started", load);
       socket.off("trip:completed", load);
+      socket.off("trip:cancelled", load);
     };
   }, [user.role]);
 

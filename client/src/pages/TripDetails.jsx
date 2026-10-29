@@ -68,13 +68,24 @@ export default function TripDetails() {
       setMessage("A replacement vehicle and driver have been assigned. The previous assignment has been removed; a refreshed QR code is ready.");
       load();
     };
+    const onCancelled = (event) => {
+      if (String(event?.tripId) !== String(id)) return;
+      setQr("");
+      setCompletionQr("");
+      setCompletionToken("");
+      setCompletionScanOpen(false);
+      setMessage(event?.reason || "This trip assignment was cancelled by Transport Administration.");
+      load();
+    };
     socket.on("connect", joinTrip);
     socket.on("trip:reallocated", onReallocated);
+    socket.on("trip:cancelled", onCancelled);
     if (socket.connected) joinTrip();
     return () => {
       socket.emit("trip:leave", id);
       socket.off("connect", joinTrip);
       socket.off("trip:reallocated", onReallocated);
+      socket.off("trip:cancelled", onCancelled);
     };
   }, [id, user.role]);
 

@@ -286,6 +286,56 @@ export async function reassignTrip({ tripId, allocation, actor, allowCapacityOve
   }
 }
 
+export async function cancelScheduledTrip({ tripId, actor, reason }) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const trip = await Trip.findById(tripId).session(session);
+    if (!trip) {
+      const error = new Error("Trip not found"); error.status = 404; throw error;
+    }
+    const cancellableStatuses = ["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"];
+    if (!cancellableStatuses.includes(trip.status)) {
+      const error = new Error("Only a trip that has not started can be cancelled. Active and completed trips cannot be cancelled from fleet management.");
+      error.status = 409;
+      throw error;
+    }
+    const request = await VehicleRequest.findById(trip.requestId).session(session);
+    trip.status = "CANCELLED";
+    trip.qrConsumed = true;
+    trip.qrVerifiedAt = undefined;
+    trip.qrExpiresAt = new Date();
+    trip.replacementStatus = "NONE";
+    await trip.save({ session });
+    await Vehicle.findByIdAndUpdate(trip.vehicleId, { status: "AVAILABLE" }, { session });
+    await Driver.findByIdAndUpdate(trip.driverId, { status: "AVAILABLE" }, { session });
+    await VehicleAllocation.updateMany({ requestId: trip.requestId, isSelected: true }, { isSelected: false }, { session });
+    if (request) {
+      request.status = "APPROVED_AWAITING_VEHICLE";
+      request.history.push({ status: request.status, actorId: actor._id, note: `Scheduled trip cancelled by Transport Admin${reason ? `: ${reason}` : ""}` });
+      await request.save({ session });
+    }
+    await session.commitTransaction();
+    try {
+      await audit(actor._id, "TRIP_CANCELLED", "Trip", trip._id, { requestId: trip.requestId, reason: reason || "Transport Admin cancellation" });
+    } catch (auditError) {
+      console.error("Trip cancellation audit failed:", auditError.message);
+    }
+    await notifyTripParticipants(trip, "Trip assignment cancelled", `Trip ${trip.tripId} was cancelled by Transport Administration${reason ? `. Reason: ${reason}` : "."}`);
+    const event = { tripId: String(trip._id), status: "CANCELLED", reason: reason || "Cancelled by Transport Administration" };
+    emit(`user-room-${trip.facultyId}`, "trip:cancelled", event);
+    emit(`driver-room-${trip.driverId}`, "trip:cancelled", event);
+    emit(`trip-room-${trip._id}`, "trip:cancelled", event);
+    emit("admin-room", "trip:cancelled", event);
+    return trip;
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+}
+
 export async function generateTripQr(trip) {
   const freshTrip = await Trip.findById(trip._id || trip).select("+qrToken");
   if (!freshTrip) throw new Error("Trip not found");

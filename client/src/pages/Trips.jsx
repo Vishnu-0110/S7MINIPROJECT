@@ -12,7 +12,11 @@ export default function Trips() {
   useEffect(() => {
     const socket = connectSocket();
     socket.on("trip:reallocated", reload);
-    return () => socket.off("trip:reallocated", reload);
+    socket.on("trip:cancelled", reload);
+    return () => {
+      socket.off("trip:reallocated", reload);
+      socket.off("trip:cancelled", reload);
+    };
   }, [reload]);
   if (loading) return <LoadingState />;
 

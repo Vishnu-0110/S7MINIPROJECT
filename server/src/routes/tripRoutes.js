@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   activeTripSummary,
+  cancelTripAction,
   completeTripAction,
   completionQr,
   endTripAction,
@@ -26,6 +27,7 @@ tripRoutes.get("/:id/qr", asyncHandler(tripQr));
 tripRoutes.post("/:id/qr/verify", requireRoles("DRIVER"), validate(qrVerifySchema), asyncHandler(verifyTripQr));
 tripRoutes.post("/:id/start", requireRoles("DRIVER"), validate(startTripSchema), asyncHandler(startTripAction));
 tripRoutes.post("/:id/end", requireRoles("DRIVER"), validate(endTripSchema), asyncHandler(endTripAction));
+tripRoutes.post("/:id/cancel", requireRoles("TRANSPORT_ADMIN"), asyncHandler(cancelTripAction));
 tripRoutes.get("/:id/completion-qr", requireRoles("DRIVER"), asyncHandler(completionQr));
 tripRoutes.post("/:id/complete", requireRoles("FACULTY_STAFF"), validate(tripCompletionSchema), asyncHandler(completeTripAction));
 tripRoutes.post("/:id/gps", requireRoles("DRIVER"), validate(gpsSchema), asyncHandler(gpsAction));

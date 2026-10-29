@@ -5,6 +5,7 @@ import LoadingState from "../components/LoadingState.jsx";
 import { useApiResource } from "../hooks/useApiResource.js";
 import { api } from "../lib/api.js";
 import { formatIndiaDateTime } from "../lib/dateTime.js";
+import { connectSocket } from "../lib/socket.js";
 
 export default function DriverDashboard() {
   const { data, loading, error, reload } = useApiResource("/trips");
@@ -23,6 +24,16 @@ export default function DriverDashboard() {
     const timer = window.setInterval(shareLocationSilently, 30_000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [activeTrip?._id]);
+
+  useEffect(() => {
+    const socket = connectSocket();
+    socket.on("trip:cancelled", reload);
+    socket.on("trip:updated", reload);
+    return () => {
+      socket.off("trip:cancelled", reload);
+      socket.off("trip:updated", reload);
+    };
+  }, [reload]);
 
   if (loading) return <LoadingState />;
 

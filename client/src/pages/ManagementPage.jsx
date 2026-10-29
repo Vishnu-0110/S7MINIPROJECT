@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { Ban, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import DataTable from "../components/DataTable.jsx";
@@ -91,11 +91,43 @@ const config = {
 export default function ManagementPage({ resource }) {
   const cfg = config[resource];
   const { data, loading, error, reload } = useApiResource(resource === "users" ? "/users?limit=100" : `/${resource}`);
+  const { data: trips, reload: reloadTrips } = useApiResource("/trips?limit=100");
   const [form, setForm] = useState(cfg.defaults || {});
   const [message, setMessage] = useState("");
   const [optionsError, setOptionsError] = useState("");
   const [options, setOptions] = useState({ vehicles: [], users: [], drivers: [] });
   const [selectedUserType, setSelectedUserType] = useState("FACULTY_STAFF");
+  const [cancellingTripId, setCancellingTripId] = useState("");
+
+  const assignedTripStatuses = ["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"];
+  const assignmentFor = (row) => (trips || []).find((trip) => assignedTripStatuses.includes(trip.status) && String(resource === "vehicles" ? trip.vehicleId?._id || trip.vehicleId : trip.driverId?._id || trip.driverId) === String(row._id));
+
+  async function cancelAssignment(trip) {
+    if (!trip || cancellingTripId) return;
+    if (!window.confirm(`Cancel the assignment for ${trip.tripId}? The faculty member, driver, and fleet records will be updated.`)) return;
+    setCancellingTripId(trip._id);
+    try {
+      await api.post(`/trips/${trip._id}/cancel`, {});
+      setMessage("Trip assignment cancelled. The vehicle and driver are available again.");
+      await Promise.all([reload(), reloadTrips()]);
+    } catch (err) {
+      setMessage(err.message || "Could not cancel the trip assignment.");
+    } finally {
+      setCancellingTripId("");
+    }
+  }
+
+  const columns = (resource === "vehicles" || resource === "drivers") ? [
+    ...cfg.columns,
+    { key: "assignment", label: "Current assignment", render: (row) => {
+      const trip = assignmentFor(row);
+      return trip ? `${trip.tripId} — ${trip.facultyId?.name || "Faculty"}` : "Available";
+    } },
+    { key: "cancelAssignment", label: "Assignment action", render: (row) => {
+      const trip = assignmentFor(row);
+      return trip ? <button className="btn btn-error btn-xs" disabled={cancellingTripId === trip._id} onClick={() => cancelAssignment(trip)}><Ban className="h-3 w-3" /> {cancellingTripId === trip._id ? "Cancelling…" : "Cancel trip"}</button> : "—";
+    } }
+  ] : cfg.columns;
 
   useEffect(() => {
     Promise.all([api.get("/vehicles?limit=100"), api.get("/users?limit=100"), api.get("/drivers?limit=100")])
@@ -147,7 +179,7 @@ export default function ManagementPage({ resource }) {
             </select>
           </label>
           <div className="workspace-list-scroll flex-1"><DataTable rows={selectedUserType === "DRIVER" ? options.drivers : data.filter((user) => user.role === selectedUserType)} columns={selectedUserType === "DRIVER" ? config.drivers.columns : cfg.columns} /></div>
-        </> : <div className="workspace-list-scroll flex-1"><DataTable rows={data} columns={cfg.columns} /></div>}
+        </> : <div className="workspace-list-scroll flex-1"><DataTable rows={data} columns={columns} /></div>}
       </div>
       <aside className="workspace-side-panel rounded-lg border border-slate-200 bg-white p-5">
         <h3 className="font-semibold">{resource === "users" ? `Add ${userTypes.find((type) => type.role === selectedUserType)?.label}` : resource === "vehicle-documents" ? "Add vehicle document" : `Add ${resource.slice(0, -1)}`}</h3>
