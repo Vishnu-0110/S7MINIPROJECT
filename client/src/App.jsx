@@ -44,7 +44,7 @@ export default function App() {
         <Route path="approvals" element={<Navigate to="/requests" replace />} />
         <Route path="trips" element={<Trips />} />
         <Route path="trips/:id" element={<TripDetails />} />
-        <Route path="tracking" element={<Shell roles={["FACULTY_STAFF", "TRANSPORT_ADMIN"]}><LiveTracking /></Shell>} />
+        <Route path="tracking" element={<Shell roles={["FACULTY_STAFF", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"]}><LiveTracking /></Shell>} />
         <Route path="vehicles" element={<Shell roles={["TRANSPORT_ADMIN"]}><ManagementPage resource="vehicles" /></Shell>} />
         <Route path="vehicles/:id/history" element={<Shell roles={["TRANSPORT_ADMIN"]}><AssetHistory asset="vehicle" /></Shell>} />
         <Route path="drivers" element={<Shell roles={["TRANSPORT_ADMIN"]}><ManagementPage resource="drivers" /></Shell>} />

@@ -20,6 +20,9 @@ export default function TripDetails() {
   const [form, setForm] = useState({ startKM: "", endKM: "", rating: "", feedback: "" });
   const [loading, setLoading] = useState(true);
   const [incidentBusy, setIncidentBusy] = useState(false);
+  const [incidentPanelOpen, setIncidentPanelOpen] = useState(false);
+  const [incidentKind, setIncidentKind] = useState("ACCIDENT");
+  const [incidentDetails, setIncidentDetails] = useState("");
   const [uploadBusy, setUploadBusy] = useState(false);
   const [startStep, setStartStep] = useState("kilometre");
   const scannerRef = useRef(null);
@@ -197,6 +200,29 @@ export default function TripDetails() {
     }
   }
 
+  async function submitFacultyIncident() {
+    const labels = { ACCIDENT: "Accident", TRAFFIC: "Traffic delay", BREAKDOWN: "Vehicle breakdown", OTHER: "Other emergency" };
+    const message = incidentDetails.trim() || `${labels[incidentKind]} reported by the faculty member.`;
+    setIncidentBusy(true);
+    try {
+      const location = await currentLocation();
+      if (incidentKind === "BREAKDOWN") {
+        await api.post("/breakdowns", { tripId: trip._id, message, severity: "HIGH", location });
+        setMessage("Breakdown reported. Transport operations will use smart allocation to assign a replacement vehicle and driver.");
+      } else {
+        await api.post("/emergencies", { tripId: trip._id, message: `${labels[incidentKind]}: ${message}`, severity: incidentKind === "ACCIDENT" ? "CRITICAL" : "HIGH", location });
+        setMessage(`${labels[incidentKind]} alert sent to transport operations.`);
+      }
+      setIncidentPanelOpen(false);
+      setIncidentDetails("");
+      await load();
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setIncidentBusy(false);
+    }
+  }
+
   if (loading) return <LoadingState />;
 
   if (!trip) {
@@ -297,7 +323,7 @@ export default function TripDetails() {
               <label className="form-control"><span className="label-text">Feedback (optional)</span><textarea className="textarea textarea-bordered" value={form.feedback} onChange={(event) => setForm((current) => ({ ...current, feedback: event.target.value }))} placeholder="Share feedback about this trip" /></label>
               <button className="btn btn-success w-full" onClick={confirmCompletion}><Star className="h-4 w-4" /> Confirm trip and rating</button>
             </div> : null}
-            {user.role === "FACULTY_STAFF" && ["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED", "TRANSFER_OR_VERIFICATION_PENDING"].includes(trip.status) ? <button className="btn btn-error mt-4 w-full" onClick={() => reportIncident("emergency")} disabled={incidentBusy}><AlertTriangle className="h-4 w-4" /> Emergency alert</button> : null}
+            {user.role === "FACULTY_STAFF" && ["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED", "TRANSFER_OR_VERIFICATION_PENDING"].includes(trip.status) ? <div className="mt-4 space-y-3">{incidentPanelOpen ? <div className="rounded-xl border border-error/30 bg-error/5 p-3"><p className="font-semibold text-error">Report an incident</p><p className="mt-1 text-xs text-slate-600">Choose the situation so transport operations receive the right response.</p><div className="mt-3 grid grid-cols-2 gap-2">{[["ACCIDENT", "Accident"], ["TRAFFIC", "Traffic"], ["BREAKDOWN", "Breakdown"], ["OTHER", "Other"]].map(([value, label]) => <button key={value} type="button" className={`btn btn-sm ${incidentKind === value ? "btn-error" : "btn-outline"}`} onClick={() => setIncidentKind(value)}>{label}</button>)}</div><textarea className="textarea textarea-bordered mt-3 w-full" value={incidentDetails} onChange={(event) => setIncidentDetails(event.target.value)} placeholder="Add details for transport operations (optional)" /><div className="mt-3 flex gap-2"><button className="btn btn-ghost flex-1" onClick={() => setIncidentPanelOpen(false)} disabled={incidentBusy}>Cancel</button><button className="btn btn-error flex-1" onClick={submitFacultyIncident} disabled={incidentBusy}>{incidentBusy ? "Sending…" : incidentKind === "BREAKDOWN" ? "Report breakdown" : "Send alert"}</button></div></div> : <button className="btn btn-error w-full" onClick={() => setIncidentPanelOpen(true)} disabled={incidentBusy}><AlertTriangle className="h-4 w-4" /> Emergency alert</button>}</div> : null}
           </div>
         )}
       </aside>

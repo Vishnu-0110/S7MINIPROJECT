@@ -37,13 +37,19 @@ async function notifyTripParticipants(trip, title, message) {
       { role: "DEPARTMENT_COORDINATOR", departmentId: trip.departmentId }
     ]
   }).select("_id");
-  await notifyMany(
-    [trip.facultyId, driver?.userId, ...managers.map((manager) => manager._id)],
-    title,
-    message,
-    "TRIP",
-    { tripId: trip._id, requestId: trip.requestId }
-  );
+  try {
+    await notifyMany(
+      [trip.facultyId, driver?.userId, ...managers.map((manager) => manager._id)],
+      title,
+      message,
+      "TRIP",
+      { tripId: trip._id, requestId: trip.requestId }
+    );
+  } catch (error) {
+    // The trip transition is already durable. Notification delivery must never
+    // turn a successful start, end, or completion into an HTTP 500 response.
+    console.error("Trip notification delivery failed:", error.message);
+  }
 }
 
 export async function createTripFromAssignment({ requestId, vehicleId, driverId, allocationId, actor, override, overrideReason }) {

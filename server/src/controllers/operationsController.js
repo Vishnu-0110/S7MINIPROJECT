@@ -58,7 +58,17 @@ export const listFuel = async (req, res) => {
 };
 export const listExpenses = listFor(Expense);
 export const listNotifications = async (req, res) => listFor(Notification, { userId: req.user._id })(req, res);
-export const listGps = listFor(GpsLog);
+export async function listGps(req, res) {
+  const { page, limit, skip } = parsePagination(req.query);
+  const query = {};
+  if (req.user.role === "FACULTY_STAFF") query.tripId = { $in: await Trip.distinct("_id", { facultyId: req.user._id }) };
+  if (req.user.role === "DEPARTMENT_COORDINATOR") query.tripId = { $in: await Trip.distinct("_id", { departmentId: req.user.departmentId }) };
+  const [data, total] = await Promise.all([
+    GpsLog.find(query).populate("tripId", "tripId destination status vehicleId driverId").populate("vehicleId", "vehicleId registrationNumber").sort({ timestamp: -1 }).skip(skip).limit(limit),
+    GpsLog.countDocuments(query)
+  ]);
+  return ok(res, "Live vehicle locations", data, 200, { pagination: paginationPayload(page, limit, total) });
+}
 export async function listEmergencies(req, res) {
   if (req.user.role === "DRIVER") {
     const driver = await Driver.findOne({ userId: req.user._id });
@@ -288,6 +298,11 @@ export async function breakdown(req, res) {
       throw error;
     }
   }
+  if (req.user.role === "FACULTY_STAFF" && String(trip.facultyId) !== String(req.user._id)) {
+    const error = new Error("Faculty can only report a breakdown for their own trip.");
+    error.status = 403;
+    throw error;
+  }
   const existing = await EmergencyAlert.findOne({ tripId: trip._id, kind: "BREAKDOWN", status: { $in: ["OPEN", "ACKNOWLEDGED"] } });
   if (existing) return ok(res, "Breakdown is already being handled", existing, 200);
   const transitioned = await Trip.findOneAndUpdate(
@@ -304,20 +319,38 @@ export async function breakdown(req, res) {
   });
   await Vehicle.findByIdAndUpdate(trip.vehicleId, { status: "BREAKDOWN_REPORTED" });
   await Driver.findByIdAndUpdate(trip.driverId, { status: "AVAILABLE" });
-  const request = await VehicleRequest.findById(trip.requestId);
-  const alternatives = request ? await runSmartAllocation(request, { excludeVehicleIds: [trip.vehicleId] }) : [];
-  let replacement = null;
-  if (alternatives[0]) {
-    try { replacement = await reassignTrip({ tripId: trip._id, allocation: alternatives[0], actor: req.user }); }
-    catch (error) { if (error.status !== 409) throw error; }
+  await notifyTripParticipants(trip, "Breakdown reported", `A breakdown was reported for trip ${trip.tripId}. Transport operations must assign a replacement vehicle and driver.`, "EMERGENCY", { incidentId: alert._id });
+  req.app.get("io")?.to("admin-room").emit("emergency:new", alert);
+  req.app.get("io")?.to(`coordinator-room-${trip.departmentId}`).emit("emergency:new", alert);
+  return ok(res, "Breakdown reported. Transport operations will assign a replacement vehicle and driver.", alert, 201);
+}
+
+export async function smartAllocateBreakdown(req, res) {
+  const alert = await EmergencyAlert.findById(req.params.id);
+  if (!alert || alert.kind !== "BREAKDOWN") {
+    const error = new Error("Breakdown incident not found."); error.status = 404; throw error;
   }
-  if (!replacement) {
-    await Trip.findByIdAndUpdate(trip._id, { status: "REPLACEMENT_UNAVAILABLE", replacementStatus: "UNAVAILABLE" });
-    alert.events.push({ action: "REPLACEMENT_UNAVAILABLE", actorId: req.user._id, note: "No eligible replacement could be reserved." });
+  if (alert.status === "RESOLVED") {
+    const error = new Error("A resolved breakdown cannot be reallocated."); error.status = 409; throw error;
+  }
+  const trip = await Trip.findById(alert.tripId);
+  const request = trip ? await VehicleRequest.findById(trip.requestId) : null;
+  if (!trip || !request) {
+    const error = new Error("The related trip or request could not be found."); error.status = 404; throw error;
+  }
+  const alternatives = await runSmartAllocation(request, { excludeVehicleIds: [trip.vehicleId] });
+  if (!alternatives.length) {
+    trip.status = "REPLACEMENT_UNAVAILABLE";
+    trip.replacementStatus = "UNAVAILABLE";
+    await trip.save();
+    alert.events.push({ action: "REPLACEMENT_UNAVAILABLE", actorId: req.user._id, note: "Smart allocation found no eligible vehicle and driver." });
     await alert.save();
+    const error = new Error("No available replacement vehicle and driver match this trip."); error.status = 409; throw error;
   }
-  await notifyTripParticipants(trip, "Breakdown reported", replacement ? `A breakdown was reported for trip ${trip.tripId}; a replacement assignment is ready.` : `A breakdown was reported for trip ${trip.tripId}; no replacement is currently available.`, "EMERGENCY", { incidentId: alert._id });
-  req.app.get("io")?.to("admin-room").emit("trip:reallocated", { alert, replacement, alternatives });
-  req.app.get("io")?.to(`coordinator-room-${trip.departmentId}`).emit("trip:reallocated", { alert, replacement, alternatives });
-  return ok(res, replacement ? "Breakdown reported and replacement assigned" : "Breakdown reported; no replacement is currently available", { alert, replacement, alternatives }, 201);
+  const replacement = await reassignTrip({ tripId: trip._id, allocation: alternatives[0], actor: req.user });
+  alert.events.push({ action: "REPLACEMENT_ASSIGNED", actorId: req.user._id, note: `Assigned ${replacement.vehicleId} and ${replacement.driverId}.` });
+  await alert.save();
+  req.app.get("io")?.to("admin-room").emit("emergency:updated", alert);
+  req.app.get("io")?.to(`coordinator-room-${trip.departmentId}`).emit("emergency:updated", alert);
+  return ok(res, "Replacement vehicle and driver assigned. The faculty QR code has been refreshed for verification.", { alert, trip: replacement, allocation: alternatives[0] });
 }

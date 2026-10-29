@@ -1,5 +1,6 @@
 import { AlertTriangle, Fuel, Navigation, QrCode } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useEffect } from "react";
 import LoadingState from "../components/LoadingState.jsx";
 import { useApiResource } from "../hooks/useApiResource.js";
 import { api } from "../lib/api.js";
@@ -9,6 +10,19 @@ export default function DriverDashboard() {
   const { data, loading, error, reload } = useApiResource("/trips");
   const activeTrip = data.find((trip) => ["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status));
   const assignedTrip = activeTrip || data.find((trip) => ["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip.status)) || data.find((trip) => trip.status === "TRIP_COMPLETION_PENDING");
+
+  useEffect(() => {
+    if (!activeTrip) return undefined;
+    let cancelled = false;
+    async function shareLocationSilently() {
+      const location = await currentLocation();
+      if (!location || cancelled) return;
+      await api.post(`/trips/${activeTrip._id}/gps`, { ...location, speed: 0 }, { silentToast: true }).catch(() => undefined);
+    }
+    shareLocationSilently();
+    const timer = window.setInterval(shareLocationSilently, 30_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [activeTrip?._id]);
 
   if (loading) return <LoadingState />;
 

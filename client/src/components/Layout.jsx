@@ -21,6 +21,7 @@ import { useAuthStore } from "../store/authStore.js";
 import { api } from "../lib/api.js";
 import { connectSocket } from "../lib/socket.js";
 import { useScrollLock } from "../hooks/useScrollLock.js";
+import { useToastStore } from "../store/toastStore.js";
 
 const nav = [
   { to: "/", label: "Overview", icon: LayoutDashboard, group: "main", roles: ["FACULTY_STAFF", "TRANSPORT_ADMIN", "DEPARTMENT_COORDINATOR"] },
@@ -36,7 +37,7 @@ const nav = [
   { to: "/maintenance", label: "Maintenance", icon: Wrench, group: "manage", roles: ["TRANSPORT_ADMIN"] },
   { to: "/fuel", label: "Fuel Logs", icon: Fuel, group: "manage", roles: ["TRANSPORT_ADMIN"] },
   { to: "/expenses", label: "Expenses", icon: BarChart3, group: "manage", roles: ["TRANSPORT_ADMIN"] },
-  { to: "/tracking", label: "Track Vehicles", icon: Map, group: "more", roles: ["FACULTY_STAFF", "TRANSPORT_ADMIN"] },
+  { to: "/tracking", label: "Track Vehicles", icon: Map, group: "more", roles: ["FACULTY_STAFF", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"] },
   { to: "/reports", label: "Reports", icon: FileText, group: "more", roles: ["TRANSPORT_ADMIN"] },
   { to: "/emergencies", label: "Emergency Alerts", icon: ShieldAlert, group: "more", roles: ["DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"] },
   { to: "/vehicle-documents", label: "Vehicle Documents", icon: FileText, group: "more", roles: ["TRANSPORT_ADMIN"] },
@@ -54,6 +55,7 @@ export default function Layout() {
   const moreNav = visibleNav.filter((item) => item.group === "more");
   const [menuOpen, setMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const pushToast = useToastStore((state) => state.push);
   const groupIsActive = (items) => items.some((item) => item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to));
 
   useEffect(() => {
@@ -109,7 +111,7 @@ export default function Layout() {
                   <p className="truncate text-[11px] font-medium text-slate-500">{user?.role?.replaceAll("_", " ")}</p>
                 </div>
               </div>
-              <button className="btn btn-square btn-ghost rounded-xl text-slate-500 hover:bg-error/10 hover:text-error" onClick={() => { clearSession(); navigate("/login"); }} aria-label="Logout"><LogOut className="h-4 w-4" /></button>
+              <button className="btn btn-square btn-ghost rounded-xl text-slate-500 hover:bg-error/10 hover:text-error" onClick={() => { clearSession(); pushToast({ title: "Signed out", message: "You have safely logged out of BIT SmartFleet.", tone: "info" }); navigate("/login"); }} aria-label="Logout"><LogOut className="h-4 w-4" /></button>
             </div>
           </header>
           <main className="app-main-scroll mx-auto min-h-0 w-full min-w-0 max-w-[1800px] flex-1 p-4 sm:p-6 lg:p-8">

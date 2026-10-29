@@ -15,7 +15,8 @@ import {
   listNotifications,
   raiseEmergency,
   resolveEmergency,
-  silenceEmergency
+  silenceEmergency,
+  smartAllocateBreakdown
 } from "../controllers/operationsController.js";
 import { requireAuth, requireRoles } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/apiResponse.js";
@@ -34,10 +35,11 @@ operationRoutes.post("/expenses", requireRoles("TRANSPORT_ADMIN"), asyncHandler(
 operationRoutes.get("/notifications", asyncHandler(listNotifications));
 operationRoutes.patch("/notifications/:id/read", asyncHandler(markNotificationRead));
 operationRoutes.patch("/notifications/read-all", asyncHandler(markAllNotificationsRead));
-operationRoutes.get("/gps", requireRoles("TRANSPORT_ADMIN"), asyncHandler(listGps));
+operationRoutes.get("/gps", requireRoles("FACULTY_STAFF", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"), asyncHandler(listGps));
 operationRoutes.get("/emergencies", requireRoles("FACULTY_STAFF", "DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"), asyncHandler(listEmergencies));
 operationRoutes.post("/emergencies", requireRoles("FACULTY_STAFF", "DRIVER", "TRANSPORT_ADMIN"), validate(emergencySchema), asyncHandler(raiseEmergency));
 operationRoutes.post("/emergencies/:id/acknowledge", requireRoles("DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"), validate(incidentNoteSchema), asyncHandler(acknowledgeEmergency));
 operationRoutes.post("/emergencies/:id/silence", requireRoles("DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"), asyncHandler(silenceEmergency));
 operationRoutes.patch("/emergencies/:id", requireRoles("DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"), validate(incidentNoteSchema), asyncHandler(resolveEmergency));
-operationRoutes.post("/breakdowns", requireRoles("DRIVER", "TRANSPORT_ADMIN"), validate(breakdownSchema), asyncHandler(breakdown));
+operationRoutes.post("/breakdowns", requireRoles("FACULTY_STAFF", "DRIVER", "TRANSPORT_ADMIN"), validate(breakdownSchema), asyncHandler(breakdown));
+operationRoutes.post("/emergencies/:id/smart-allocate", requireRoles("TRANSPORT_ADMIN"), asyncHandler(smartAllocateBreakdown));
