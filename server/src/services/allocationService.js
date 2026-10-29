@@ -9,11 +9,9 @@ const defaultWeights = {
   driver: 10
 };
 
-export const MAX_ALLOCATION_SPARE_SEATS = 5;
-
 export function isCapacityFit(vehicle, passengerCount) {
   const spareCapacity = Number(vehicle.capacity) - Number(passengerCount);
-  return spareCapacity >= 0 && spareCapacity <= MAX_ALLOCATION_SPARE_SEATS;
+  return spareCapacity >= 0;
 }
 
 function clamp(value) {
@@ -71,11 +69,12 @@ export async function driverHasApprovedLeave(driverId, start, end) {
   }));
 }
 
-export async function scoreVehicleForRequest({ request, vehicle, driver, maintenanceConflict, vehicleConflict, driverConflict, weights }) {
+export async function scoreVehicleForRequest({ request, vehicle, driver, maintenanceConflict, vehicleConflict, driverConflict, weights, allowCapacityOverride = false }) {
   const passengerCount = request.passengerCount || 1;
   const distanceKm = estimateDistanceKm(request);
   const spareCapacity = vehicle.capacity - passengerCount;
-  const capacityScore = isCapacityFit(vehicle, passengerCount) ? clamp(100 - spareCapacity * 2) : 0;
+  const capacityEligible = allowCapacityOverride ? spareCapacity >= 0 : isCapacityFit(vehicle, passengerCount);
+  const capacityScore = capacityEligible ? clamp(100 - Math.min(spareCapacity * 2, 45)) : 0;
   const facilityCompatible = vehicleSupportsRequest(vehicle, request);
   const availabilityScore = vehicle.status === "AVAILABLE" && !vehicleConflict && facilityCompatible ? 100 : 0;
   const distanceScore = clamp((vehicle.mileageKmPerLiter || 4) * 14 - distanceKm / 10);
@@ -92,7 +91,7 @@ export async function scoreVehicleForRequest({ request, vehicle, driver, mainten
 
   const estimatedCost = Math.round((distanceKm / (vehicle.mileageKmPerLiter || 4)) * 95 + distanceKm * 8);
   const reasons = [];
-  if (capacityScore > 0) reasons.push(spareCapacity === 0 ? "Exact passenger capacity" : `${spareCapacity} spare seats (within 5-seat buffer)`);
+  if (capacityScore > 0) reasons.push(spareCapacity === 0 ? "Exact passenger capacity" : `${spareCapacity} spare seats available`);
   if (availabilityScore === 100) reasons.push("Vehicle available");
   if (facilityCompatible && request.requiredFacilities?.length) reasons.push("Required facilities available");
   if (driverAvailabilityScore === 100) reasons.push("Driver available");
@@ -113,9 +112,11 @@ export async function scoreVehicleForRequest({ request, vehicle, driver, mainten
   };
 }
 
-export async function runSmartAllocation(request, { excludeVehicleIds = [] } = {}) {
+export async function runSmartAllocation(request, { excludeVehicleIds = [], allowCapacityOverride = false, vehicleType } = {}) {
   const weights = await getAllocationWeights();
-  const vehicles = await Vehicle.find({ _id: { $nin: excludeVehicleIds }, status: "AVAILABLE" }).lean();
+  const vehicleQuery = { _id: { $nin: excludeVehicleIds }, status: "AVAILABLE" };
+  if (vehicleType) vehicleQuery.type = vehicleType;
+  const vehicles = await Vehicle.find(vehicleQuery).lean();
   const drivers = await Driver.find({ status: "AVAILABLE" }).lean();
   const start = request.departureTime;
   const end = request.returnTime;
@@ -145,7 +146,8 @@ export async function runSmartAllocation(request, { excludeVehicleIds = [] } = {
       maintenanceConflict,
       vehicleConflict,
       driverConflict,
-      weights
+      weights,
+      allowCapacityOverride
     });
     scored.push(item);
   }

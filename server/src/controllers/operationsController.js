@@ -348,7 +348,7 @@ export async function smartAllocateBreakdown(req, res) {
   if (!trip || !request) {
     const error = new Error("The related trip or request could not be found."); error.status = 404; throw error;
   }
-  const alternatives = await runSmartAllocation(request, { excludeVehicleIds: [trip.vehicleId] });
+  const alternatives = await runSmartAllocation(request, { excludeVehicleIds: [trip.vehicleId], allowCapacityOverride: true, vehicleType: "Bus" });
   if (!alternatives.length) {
     trip.status = "REPLACEMENT_UNAVAILABLE";
     trip.replacementStatus = "UNAVAILABLE";
@@ -357,7 +357,7 @@ export async function smartAllocateBreakdown(req, res) {
     await alert.save();
     const error = new Error("No available replacement vehicle and driver match this trip."); error.status = 409; throw error;
   }
-  const replacement = await reassignTrip({ tripId: trip._id, allocation: alternatives[0], actor: req.user });
+  const replacement = await reassignTrip({ tripId: trip._id, allocation: alternatives[0], actor: req.user, allowCapacityOverride: true });
   alert.events.push({ action: "REPLACEMENT_ASSIGNED", actorId: req.user._id, note: `Assigned ${replacement.vehicleId} and ${replacement.driverId}.` });
   await alert.save();
   req.app.get("io")?.to("admin-room").emit("emergency:updated", alert);

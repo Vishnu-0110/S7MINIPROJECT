@@ -96,12 +96,12 @@ export async function createTripFromAssignment({ requestId, vehicleId, driverId,
     });
 
     const vehicle = await Vehicle.findOneAndUpdate(
-      { _id: vehicleId, status: "AVAILABLE", condition: { $ne: "POOR" }, capacity: { $gte: request.passengerCount, $lte: request.passengerCount + 5 } },
+      { _id: vehicleId, status: "AVAILABLE", condition: { $ne: "POOR" }, capacity: { $gte: request.passengerCount } },
       { status: "ASSIGNED" },
       { new: true, session }
     );
     if (!vehicle || !isCapacityFit(vehicle, request.passengerCount)) {
-      const error = new Error("Vehicle capacity must exactly match the passenger count or have no more than 5 spare seats.");
+      const error = new Error("Vehicle does not have enough seats for the passenger count.");
       error.status = 409;
       throw error;
     }
@@ -218,7 +218,7 @@ export async function scheduleApprovedRequest({ requestId, actor }) {
   }
 }
 
-export async function reassignTrip({ tripId, allocation, actor }) {
+export async function reassignTrip({ tripId, allocation, actor, allowCapacityOverride = false }) {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -229,12 +229,12 @@ export async function reassignTrip({ tripId, allocation, actor }) {
       throw error;
     }
     const vehicle = await Vehicle.findOneAndUpdate(
-      { _id: allocation.vehicleId, status: "AVAILABLE", capacity: { $gte: trip.passengerCount, $lte: trip.passengerCount + 5 } },
+      { _id: allocation.vehicleId, status: "AVAILABLE", capacity: { $gte: trip.passengerCount } },
       { status: "ASSIGNED" },
       { new: true, session }
     );
     if (!vehicle || !isCapacityFit(vehicle, trip.passengerCount)) {
-      const error = new Error("Replacement capacity must exactly match the passenger count or have no more than 5 spare seats.");
+      const error = new Error(allowCapacityOverride ? "No available replacement bus has enough seats for this trip." : "Replacement vehicle does not have enough seats for this trip.");
       error.status = 409;
       throw error;
     }
