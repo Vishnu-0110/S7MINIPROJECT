@@ -186,30 +186,35 @@ button, input, select, textarea {
   @apply min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 sm:p-5;
 }
 
-#qr-reader {
+.qr-camera-reader {
   max-width: 100%;
   width: 100% !important;
+  min-height: 12rem;
   overflow: hidden;
   border-radius: 0.75rem;
   border: 1px solid rgb(203 213 225) !important;
   background: rgb(248 250 252);
 }
 
-#qr-reader video,
-#qr-reader img {
+.qr-camera-reader video,
+.qr-camera-reader img {
   width: 100% !important;
-  max-height: min(18rem, 58vw) !important;
-  height: auto !important;
+  min-height: 12rem;
+  max-height: min(22rem, 70vw) !important;
+  height: min(22rem, 70vw) !important;
   object-fit: cover;
   border-radius: 0.6rem;
 }
 
-#qr-reader__dashboard {
+#qr-reader__dashboard,
+#completion-qr-reader__dashboard {
   padding: 0.75rem !important;
 }
 
 #qr-reader__dashboard select,
-#qr-reader__dashboard button {
+#qr-reader__dashboard button,
+#completion-qr-reader__dashboard select,
+#completion-qr-reader__dashboard button {
   max-width: 100%;
 }
 

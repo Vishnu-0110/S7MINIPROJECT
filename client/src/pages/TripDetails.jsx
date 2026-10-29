@@ -25,6 +25,10 @@ export default function TripDetails() {
   const [incidentKind, setIncidentKind] = useState("ACCIDENT");
   const [incidentDetails, setIncidentDetails] = useState("");
   const [startStep, setStartStep] = useState("kilometre");
+  const [driverScanError, setDriverScanError] = useState("");
+  const [completionScanError, setCompletionScanError] = useState("");
+  const [driverScanAttempt, setDriverScanAttempt] = useState(0);
+  const [completionScanAttempt, setCompletionScanAttempt] = useState(0);
   const scannerRef = useRef(null);
   const completionScannerRef = useRef(null);
 
@@ -89,15 +93,16 @@ export default function TripDetails() {
       await stopQrScanner(scanner);
       if (!cancelled) await handleScannedToken(decoded);
     };
+    setDriverScanError("");
     startCameraScanner(scanner, onScan).catch((error) => {
-      if (!cancelled) setMessage(cameraErrorMessage(error));
+      if (!cancelled) setDriverScanError(cameraErrorMessage(error));
     });
     return () => {
       cancelled = true;
       stopQrScanner(scanner);
       if (scannerRef.current === scanner) scannerRef.current = null;
     };
-  }, [startStep, user.role, trip?.status]);
+  }, [startStep, user.role, trip?.status, driverScanAttempt]);
 
   useEffect(() => {
     if (user.role !== "FACULTY_STAFF" || !completionScanOpen || trip?.status !== "TRIP_COMPLETION_PENDING") return undefined;
@@ -114,15 +119,16 @@ export default function TripDetails() {
       setMessage("Completion QR scanned. Select a rating, then confirm completion.");
       setCompletionScanOpen(false);
     };
+    setCompletionScanError("");
     startCameraScanner(scanner, onScan).catch((error) => {
-      if (!cancelled) setMessage(cameraErrorMessage(error));
+      if (!cancelled) setCompletionScanError(cameraErrorMessage(error));
     });
     return () => {
       cancelled = true;
       stopQrScanner(scanner);
       if (completionScannerRef.current === scanner) completionScannerRef.current = null;
     };
-  }, [completionScanOpen, trip?.status, user.role]);
+  }, [completionScanOpen, trip?.status, user.role, completionScanAttempt]);
 
   async function verify(scannedToken) {
     if (!scannedToken) {
@@ -167,6 +173,7 @@ export default function TripDetails() {
       return;
     }
     setMessage("Step 2 of 2: Scan the faculty QR code to verify and start the trip.");
+    setDriverScanError("");
     setStartStep("scan");
   }
 
@@ -306,7 +313,8 @@ export default function TripDetails() {
               {trip.status === "SCHEDULED" && startStep === "kilometre" ? <p className="text-sm text-slate-600">Complete Step 1 by entering the starting kilometre reading. QR scanning becomes available in Step 2.</p> : <>
                 <div className="rounded-xl bg-primary/5 p-3 text-sm font-medium text-primary">Step 2 of 2: Scan the faculty QR code. A successful scan verifies the trip and starts it automatically.</div>
                 <div className="flex items-center gap-2 text-sm font-medium text-primary"><Camera className="h-4 w-4" /> Camera scan</div>
-                <div id="qr-reader" aria-label="Camera QR code scanner" />
+                <div id="qr-reader" className="qr-camera-reader" aria-label="Camera QR code scanner" />
+                {driverScanError ? <div className="rounded-lg border border-error/30 bg-error/5 p-3 text-sm text-error"><p>{driverScanError}</p><button className="btn btn-outline btn-sm mt-2" onClick={() => setDriverScanAttempt((attempt) => attempt + 1)}>Retry camera</button></div> : null}
                 <p className="text-xs text-slate-500">Allow camera access, then hold the QR code inside the frame. Image uploads are not used for trip verification.</p>
                 <button className="btn btn-ghost btn-sm w-full" onClick={() => setStartStep("kilometre")}>Cancel camera scan</button>
               </>}
@@ -340,7 +348,7 @@ export default function TripDetails() {
             <p className="text-sm text-slate-600">Live GPS updates appear in the tracking screen when the driver starts sending location records.</p>
             {user.role === "FACULTY_STAFF" && trip.status === "TRIP_COMPLETION_PENDING" ? <div className="mt-4 space-y-3">
               <div className="rounded-xl bg-primary/5 p-3 text-sm text-primary">Scan the driver’s completion QR code and submit your rating to end this trip.</div>
-              {completionScanOpen ? <><div id="completion-qr-reader" aria-label="Completion QR code scanner" /><p className="text-xs text-slate-500">Allow camera access, then hold the driver’s QR code inside the frame.</p><button className="btn btn-ghost btn-sm w-full" onClick={() => setCompletionScanOpen(false)}>Cancel camera scan</button></> : <button className="btn btn-primary w-full" onClick={() => setCompletionScanOpen(true)}><Camera className="h-4 w-4" /> Scan completion QR</button>}
+              {completionScanOpen ? <><div id="completion-qr-reader" className="qr-camera-reader" aria-label="Completion QR code scanner" />{completionScanError ? <div className="rounded-lg border border-error/30 bg-error/5 p-3 text-sm text-error"><p>{completionScanError}</p><button className="btn btn-outline btn-sm mt-2" onClick={() => setCompletionScanAttempt((attempt) => attempt + 1)}>Retry camera</button></div> : null}<p className="text-xs text-slate-500">Allow camera access, then hold the driver’s QR code inside the frame.</p><button className="btn btn-ghost btn-sm w-full" onClick={() => setCompletionScanOpen(false)}>Cancel camera scan</button></> : <button className="btn btn-primary w-full" onClick={() => { setCompletionScanError(""); setCompletionScanOpen(true); }}><Camera className="h-4 w-4" /> Scan completion QR</button>}
               {completionToken ? <p className="text-sm font-medium text-success">Completion QR scanned successfully.</p> : null}
               <label className="form-control"><span className="label-text">Star rating</span><select className="select select-bordered" value={form.rating} onChange={(event) => setForm((current) => ({ ...current, rating: event.target.value }))}><option value="">Select rating</option>{[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} star{rating > 1 ? "s" : ""}</option>)}</select></label>
               <label className="form-control"><span className="label-text">Feedback (optional)</span><textarea className="textarea textarea-bordered" value={form.feedback} onChange={(event) => setForm((current) => ({ ...current, feedback: event.target.value }))} placeholder="Share feedback about this trip" /></label>
@@ -357,16 +365,12 @@ export default function TripDetails() {
 async function startCameraScanner(scanner, onScan) {
   const config = { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1 };
   const onError = () => undefined;
-  try {
-    await scanner.start({ facingMode: { ideal: "environment" } }, config, onScan, onError);
-  } catch (primaryError) {
-    // Some desktop browsers and older mobile browsers do not honour facingMode.
-    // Fall back to an actual enumerated camera without restoring the image-upload UI.
-    const cameras = await Html5Qrcode.getCameras().catch(() => []);
-    const fallback = cameras.find((camera) => /back|rear|environment/i.test(camera.label)) || cameras[0];
-    if (!fallback) throw primaryError;
-    await scanner.start(fallback.id, config, onScan, onError);
-  }
+  // Using an enumerated camera ID is more reliable than a facing-mode constraint
+  // on Android WebViews and mobile Chromium browsers.
+  const cameras = await Html5Qrcode.getCameras();
+  const camera = cameras.find((item) => /back|rear|environment/i.test(item.label)) || cameras[0];
+  if (!camera) throw new Error("No camera available");
+  await scanner.start(camera.id, config, onScan, onError);
 }
 
 async function stopQrScanner(scanner) {
