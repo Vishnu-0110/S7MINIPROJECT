@@ -13,6 +13,8 @@ const schema = z.object({
   passengerCount: z.coerce.number().positive(),
   date: z.string().min(1),
   departureTime: z.string().min(1),
+  returnDate: z.string().min(1),
+  returnTime: z.string().min(1),
   priority: z.string()
 });
 
@@ -65,17 +67,22 @@ export default function RequestForm() {
   async function onSubmit(values) {
     try {
       const departureIso = indiaDateTimeToIso(values.date, values.departureTime);
+      const returnIso = indiaDateTimeToIso(values.returnDate, values.returnTime);
       const departure = new Date(departureIso);
+      const returning = new Date(returnIso);
       if (departure <= new Date()) {
         setError("root", { message: "Departure time must be in the future." });
         return;
       }
-      const returning = new Date(departure.getTime() + 8 * 60 * 60 * 1000);
+      if (returning <= departure) {
+        setError("root", { message: "Return date and time must be after the departure." });
+        return;
+      }
       const payload = {
         ...values,
         date: `${values.date}T00:00:00+05:30`,
         departureTime: departureIso,
-        returnTime: returning.toISOString(),
+        returnTime: returnIso,
         waypoints: [],
         passengers: []
       };
@@ -101,8 +108,10 @@ export default function RequestForm() {
             <option>High</option>
             <option>Urgent</option>
           </select>
-          <input className="input input-bordered" aria-label="Trip date" type="date" {...register("date")} />
-          <label className="form-control"><span className="label-text mb-1">Start time</span><input className="input input-bordered" type="time" {...register("departureTime")} /></label>
+          <label className="form-control"><span className="label-text mb-1">Departure date</span><input className="input input-bordered" type="date" {...register("date")} /></label>
+          <label className="form-control"><span className="label-text mb-1">Departure time</span><input className="input input-bordered" type="time" {...register("departureTime")} /></label>
+          <label className="form-control"><span className="label-text mb-1">Return date</span><input className="input input-bordered" type="date" {...register("returnDate")} /></label>
+          <label className="form-control"><span className="label-text mb-1">Return time</span><input className="input input-bordered" type="time" {...register("returnTime")} /></label>
           {formState.errors.root ? <p className="text-sm text-error md:col-span-2">{formState.errors.root.message}</p> : null}
           <button className="btn btn-primary md:col-span-2" disabled={formState.isSubmitting}>
             <Send className="h-4 w-4" />

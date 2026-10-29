@@ -4,7 +4,7 @@ import DataTable from "../components/DataTable.jsx";
 import LoadingState from "../components/LoadingState.jsx";
 import { api } from "../lib/api.js";
 import { connectSocket } from "../lib/socket.js";
-import { formatIndiaDateTime, formatIndiaSchedule } from "../lib/dateTime.js";
+import { formatIndiaDateTime } from "../lib/dateTime.js";
 
 export default function LiveTracking() {
   const [gps, setGps] = useState([]);
@@ -43,7 +43,8 @@ export default function LiveTracking() {
           rows={trips}
           columns={[
             { key: "vehicle", label: "Vehicle", render: (row) => row.vehicleId?.vehicleId },
-            { key: "schedule", label: "Schedule", render: (row) => formatIndiaSchedule(row.scheduledStartTime, row.scheduledEndTime) },
+            { key: "scheduledStartTime", label: "Scheduled departure", render: (row) => formatIndiaDateTime(row.scheduledStartTime, "—") },
+            { key: "scheduledEndTime", label: "Scheduled return", render: (row) => formatIndiaDateTime(row.scheduledEndTime, "—") },
             { key: "status", label: "Status" }
           ]}
         />

@@ -27,10 +27,3 @@ export function formatIndiaDateTime(value, fallback = "Not scheduled") {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? fallback : indiaDateTime.format(date);
 }
-
-export function formatIndiaSchedule(start, end) {
-  const startLabel = formatIndiaDateTime(start);
-  if (!end) return startLabel;
-  const endLabel = formatIndiaDateTime(end);
-  return `${startLabel} – ${endLabel}`;
-}

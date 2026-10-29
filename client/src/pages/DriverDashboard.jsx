@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import LoadingState from "../components/LoadingState.jsx";
 import { useApiResource } from "../hooks/useApiResource.js";
 import { api } from "../lib/api.js";
-import { formatIndiaSchedule } from "../lib/dateTime.js";
+import { formatIndiaDateTime } from "../lib/dateTime.js";
 
 export default function DriverDashboard() {
   const { data, loading, error, reload } = useApiResource("/trips");
@@ -68,7 +68,8 @@ function TripActionCard({ trip, reload }) {
           <p className="text-sm font-medium text-primary">{isActive ? "Trip in progress" : isCompletionPending ? "Awaiting faculty confirmation" : "Next assigned trip"}</p>
           <h3 className="mt-1 text-lg font-semibold">{trip.destination}</h3>
           <p className="mt-1 text-sm text-slate-600">{trip.vehicleId?.vehicleId || "Vehicle pending"} · {trip.passengerCount} passengers · {trip.source}</p>
-          <p className="mt-1 text-sm text-slate-600">Scheduled: {formatIndiaSchedule(trip.scheduledStartTime, trip.scheduledEndTime)}</p>
+          <p className="mt-1 text-sm text-slate-600">Scheduled departure: {formatIndiaDateTime(trip.scheduledStartTime, "—")}</p>
+          <p className="mt-1 text-sm text-slate-600">Scheduled return: {formatIndiaDateTime(trip.scheduledEndTime, "—")}</p>
         </div>
         <span className="badge badge-primary">{trip.status.replaceAll("_", " ")}</span>
       </div>
