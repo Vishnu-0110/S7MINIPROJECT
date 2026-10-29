@@ -6,6 +6,7 @@ import { useApiResource } from "../hooks/useApiResource.js";
 import { api } from "../lib/api.js";
 import { useAuthStore } from "../store/authStore.js";
 import { connectSocket } from "../lib/socket.js";
+import { formatIndiaDateTime } from "../lib/dateTime.js";
 
 const configs = {
   maintenance: {
@@ -48,6 +49,7 @@ const configs = {
       { key: "kind", label: "Type" },
       { key: "severity", label: "Severity" },
       { key: "message", label: "Message" },
+      { key: "createdAt", label: "Reported", render: (row) => formatIndiaDateTime(row.createdAt, "—") },
       { key: "status", label: "Status" },
       { key: "location", label: "Location", render: (row) => {
         const location = row.location || row.lastKnownLocation;

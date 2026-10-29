@@ -7,6 +7,7 @@ import StatGrid from "../components/StatGrid.jsx";
 import { api } from "../lib/api.js";
 import { connectSocket } from "../lib/socket.js";
 import { useAuthStore } from "../store/authStore.js";
+import { formatIndiaDateTime, formatIndiaSchedule } from "../lib/dateTime.js";
 
 export default function Dashboard() {
   const user = useAuthStore((state) => state.user);
@@ -88,6 +89,7 @@ export default function Dashboard() {
               { key: "requestId", label: "Request" },
               { key: "tripType", label: "Type" },
               { key: "destination", label: "Destination" },
+              { key: "schedule", label: "Schedule", render: (row) => formatIndiaSchedule(row.departureTime, row.returnTime) },
               { key: "status", label: "Status" }
             ]}
           />
@@ -99,6 +101,7 @@ export default function Dashboard() {
             columns={[
               { key: "title", label: "Title" },
               { key: "message", label: "Message" },
+              { key: "createdAt", label: "Received", render: (row) => formatIndiaDateTime(row.createdAt, "—") },
               { key: "type", label: "Type" }
             ]}
           />

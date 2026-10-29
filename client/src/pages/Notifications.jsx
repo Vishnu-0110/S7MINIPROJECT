@@ -4,6 +4,7 @@ import LoadingState from "../components/LoadingState.jsx";
 import { useApiResource } from "../hooks/useApiResource.js";
 import { api } from "../lib/api.js";
 import { connectSocket } from "../lib/socket.js";
+import { formatIndiaDateTime } from "../lib/dateTime.js";
 
 export default function Notifications() {
   const { data, loading, error, reload } = useApiResource("/notifications");
@@ -32,6 +33,7 @@ export default function Notifications() {
           { key: "title", label: "Title" },
           { key: "message", label: "Message" },
           { key: "type", label: "Type" },
+          { key: "createdAt", label: "Received", render: (row) => formatIndiaDateTime(row.createdAt, "—") },
           { key: "isRead", label: "Read", render: (row) => (row.isRead ? "Yes" : "No") },
           { key: "action", label: "Action", render: (row) => row.isRead ? "-" : <button className="btn btn-ghost btn-xs" onClick={() => markRead(row._id)}>Mark read</button> }
         ]}

@@ -5,6 +5,7 @@ import { useApiResource } from "../hooks/useApiResource.js";
 import { api } from "../lib/api.js";
 import { useAuthStore } from "../store/authStore.js";
 import { useState } from "react";
+import { formatIndiaSchedule } from "../lib/dateTime.js";
 
 export default function Reports() {
   const { data: trips, loading, error } = useApiResource("/trips?limit=50");
@@ -59,6 +60,7 @@ export default function Reports() {
           { key: "vehicle", label: "Vehicle", render: (row) => row.vehicleId?.vehicleId || "-" },
           { key: "driver", label: "Driver", render: (row) => row.driverId?.userId?.name || "-" },
           { key: "destination", label: "Destination" },
+          { key: "schedule", label: "Schedule", render: (row) => formatIndiaSchedule(row.scheduledStartTime, row.scheduledEndTime) },
           { key: "distance", label: "KM" },
           { key: "fuelEfficiency", label: "Fuel Eff." },
           { key: "status", label: "Status" }

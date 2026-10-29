@@ -5,6 +5,7 @@ import { useParams } from "react-router-dom";
 import LoadingState from "../components/LoadingState.jsx";
 import { api } from "../lib/api.js";
 import { useAuthStore } from "../store/authStore.js";
+import { formatIndiaDateTime } from "../lib/dateTime.js";
 
 export default function TripDetails() {
   const { id } = useParams();
@@ -212,14 +213,24 @@ export default function TripDetails() {
       <div className="rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="text-lg font-semibold">{trip.requestId?.requestId || trip.tripId}</h2>
         <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-          <p>Faculty: {trip.facultyId?.name}</p>
-          <p>Department: {trip.departmentId?.code}</p>
-          <p>Vehicle: {trip.vehicleId?.vehicleId}</p>
-          <p>Driver: {trip.driverId?.userId?.name}</p>
-          <p>Destination: {trip.destination}</p>
-          <p>Status: {trip.status}</p>
-          <p>Passengers: {trip.passengerCount}</p>
-          <p>Distance: {trip.distance ?? "-"} km</p>
+          <p><span className="font-medium">Faculty:</span> {trip.facultyId?.name || "—"}</p>
+          <p><span className="font-medium">Faculty email:</span> {trip.facultyId?.email || "—"}</p>
+          <p><span className="font-medium">Department:</span> {trip.departmentId?.code || trip.departmentId?.name || "Not assigned"}</p>
+          <p><span className="font-medium">Trip type:</span> {trip.tripType || "—"}</p>
+          <p><span className="font-medium">Scheduled departure:</span> {formatIndiaDateTime(trip.scheduledStartTime)}</p>
+          <p><span className="font-medium">Scheduled return:</span> {formatIndiaDateTime(trip.scheduledEndTime)}</p>
+          <p><span className="font-medium">Vehicle:</span> {trip.vehicleId?.vehicleId || "—"}</p>
+          <p><span className="font-medium">Registration:</span> {trip.vehicleId?.registrationNumber || "—"}</p>
+          <p><span className="font-medium">Driver:</span> {trip.driverId?.userId?.name || "—"}</p>
+          <p><span className="font-medium">Driver phone:</span> {trip.driverId?.phone || trip.driverId?.userId?.phone || "—"}</p>
+          <p><span className="font-medium">Route:</span> {trip.source || "BIT"} → {trip.destination || "—"}</p>
+          <p><span className="font-medium">Passengers:</span> {trip.passengerCount ?? "—"}</p>
+          <p><span className="font-medium">Status:</span> {trip.status?.replaceAll("_", " ") || "—"}</p>
+          <p><span className="font-medium">Distance:</span> {trip.distance ?? "—"} km</p>
+          {trip.startTime ? <p><span className="font-medium">Actual start:</span> {formatIndiaDateTime(trip.startTime)}</p> : null}
+          {trip.endTime ? <p><span className="font-medium">Actual end:</span> {formatIndiaDateTime(trip.endTime)}</p> : null}
+          {trip.startKM !== undefined ? <p><span className="font-medium">Start odometer:</span> {trip.startKM} km</p> : null}
+          {trip.endKM !== undefined ? <p><span className="font-medium">End odometer:</span> {trip.endKM} km</p> : null}
           {user.role === "TRANSPORT_ADMIN" ? <p>Faculty rating: {trip.facultyRating ? `${trip.facultyRating} / 5` : "Awaiting rating"}</p> : null}
         </div>
         {message ? <div className="alert mt-4">{message}</div> : null}

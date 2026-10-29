@@ -6,6 +6,7 @@ import LoadingState from "../components/LoadingState.jsx";
 import { useApiResource } from "../hooks/useApiResource.js";
 import { useAuthStore } from "../store/authStore.js";
 import { api } from "../lib/api.js";
+import { formatIndiaSchedule } from "../lib/dateTime.js";
 
 export default function Requests() {
   const { data, loading, error, reload } = useApiResource("/requests");
@@ -78,6 +79,7 @@ export default function Requests() {
           { key: "facultyId", label: "Faculty", render: (row) => row.facultyId?.name || "Faculty" },
           { key: "tripType", label: "Type" },
           { key: "destination", label: "Destination" },
+          { key: "schedule", label: "Schedule", render: (row) => formatIndiaSchedule(row.departureTime, row.returnTime) },
           { key: "passengerCount", label: "Passengers" },
           { key: "status", label: "Status" },
           {
