@@ -62,7 +62,7 @@ export default function SmartAllocation() {
               <span className="badge badge-primary">{item.score}%</span>
             </div>
             <div className="space-y-2 text-sm">
-              <p>Capacity: {item.vehicleId?.capacity}</p>
+              <p>Capacity: {item.vehicleId?.capacity} seats</p>
               <p>Driver: {item.driverId?.userId?.name || "Available"}</p>
               <p>Maintenance: {item.maintenanceScore >= 80 ? "GOOD" : "CHECK"}</p>
               <p>Estimated Cost: Rs. {item.estimatedCost}</p>

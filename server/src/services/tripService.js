@@ -13,7 +13,7 @@ import { humanId, makeQrToken } from "../utils/id.js";
 import { audit } from "./auditService.js";
 import { assertNoDoubleBooking } from "./bookingService.js";
 import { notify, notifyMany } from "./notificationService.js";
-import { vehicleSupportsRequest } from "./allocationService.js";
+import { isCapacityFit, vehicleSupportsRequest } from "./allocationService.js";
 import { sendTripDayReminder } from "./tripReminderService.js";
 import { isTodayInIndia } from "../utils/indiaTime.js";
 import { ensureRoutineServiceSchedule } from "./maintenanceService.js";
@@ -96,12 +96,12 @@ export async function createTripFromAssignment({ requestId, vehicleId, driverId,
     });
 
     const vehicle = await Vehicle.findOneAndUpdate(
-      { _id: vehicleId, status: "AVAILABLE", condition: { $ne: "POOR" }, capacity: { $gte: request.passengerCount } },
+      { _id: vehicleId, status: "AVAILABLE", condition: { $ne: "POOR" }, capacity: { $gte: request.passengerCount, $lte: request.passengerCount + 5 } },
       { status: "ASSIGNED" },
       { new: true, session }
     );
-    if (!vehicle) {
-      const error = new Error("Vehicle is no longer available or does not have enough capacity.");
+    if (!vehicle || !isCapacityFit(vehicle, request.passengerCount)) {
+      const error = new Error("Vehicle capacity must exactly match the passenger count or have no more than 5 spare seats.");
       error.status = 409;
       throw error;
     }
@@ -229,12 +229,12 @@ export async function reassignTrip({ tripId, allocation, actor }) {
       throw error;
     }
     const vehicle = await Vehicle.findOneAndUpdate(
-      { _id: allocation.vehicleId, status: "AVAILABLE", capacity: { $gte: trip.passengerCount } },
+      { _id: allocation.vehicleId, status: "AVAILABLE", capacity: { $gte: trip.passengerCount, $lte: trip.passengerCount + 5 } },
       { status: "ASSIGNED" },
       { new: true, session }
     );
-    if (!vehicle) {
-      const error = new Error("Replacement vehicle is no longer available.");
+    if (!vehicle || !isCapacityFit(vehicle, trip.passengerCount)) {
+      const error = new Error("Replacement capacity must exactly match the passenger count or have no more than 5 spare seats.");
       error.status = 409;
       throw error;
     }

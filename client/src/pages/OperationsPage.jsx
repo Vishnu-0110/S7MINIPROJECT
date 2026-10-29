@@ -1,5 +1,5 @@
 import { AlertTriangle, BellRing, CheckCircle2, Plus, Volume2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import DataTable from "../components/DataTable.jsx";
 import LoadingState from "../components/LoadingState.jsx";
 import { useApiResource } from "../hooks/useApiResource.js";
@@ -72,6 +72,7 @@ export default function OperationsPage({ resource }) {
   const user = useAuthStore((state) => state.user);
   const canAdd = resource !== "emergencies";
   const [alarmEnabled, setAlarmEnabled] = useState(false);
+  const alarmTimerRef = useRef(null);
 
   useEffect(() => {
     if (resource !== "emergencies") return undefined;
@@ -88,6 +89,22 @@ export default function OperationsPage({ resource }) {
       socket.off("emergency:updated", reload);
     };
   }, [alarmEnabled, reload, resource]);
+
+  const activeAlarm = resource === "emergencies" && alarmEnabled && data.some((item) => item.status !== "RESOLVED" && !item.alarmStoppedAt);
+
+  useEffect(() => {
+    if (!activeAlarm) {
+      if (alarmTimerRef.current) window.clearInterval(alarmTimerRef.current);
+      alarmTimerRef.current = null;
+      return undefined;
+    }
+    playAlarm();
+    alarmTimerRef.current = window.setInterval(playAlarm, 900);
+    return () => {
+      if (alarmTimerRef.current) window.clearInterval(alarmTimerRef.current);
+      alarmTimerRef.current = null;
+    };
+  }, [activeAlarm]);
 
   useEffect(() => {
     Promise.all([api.get("/vehicles?limit=100"), api.get("/trips?limit=100"), api.get("/drivers?limit=100")])
@@ -136,7 +153,7 @@ export default function OperationsPage({ resource }) {
   async function silenceEmergency(id) {
     try {
       await api.post(`/emergencies/${id}/silence`);
-      setMessage("Alarm stopped for your session. The incident is still active.");
+      setMessage("Alarm stopped for all responders. The incident is still active.");
       await reload();
     } catch (err) {
       setMessage(err.message);
@@ -167,7 +184,7 @@ export default function OperationsPage({ resource }) {
         {optionsError ? <div className="alert alert-warning">Some selection lists could not be loaded: {optionsError}</div> : null}
         <div className="workspace-list-scroll flex-1"><DataTable
           rows={data}
-          columns={resource === "emergencies" ? [...cfg.columns, { key: "action", label: "Action", render: (row) => row.status === "RESOLVED" || user?.role === "DRIVER" || user?.role === "FACULTY_STAFF" ? "-" : <div className="flex flex-wrap gap-2">{row.status === "OPEN" ? <button className="btn btn-warning btn-xs" onClick={() => acknowledgeEmergency(row._id)}><CheckCircle2 className="h-3 w-3" /> Acknowledge</button> : null}{row.kind === "BREAKDOWN" && user?.role === "TRANSPORT_ADMIN" && row.status !== "RESOLVED" ? <button className="btn btn-primary btn-xs" onClick={() => smartAllocateBreakdown(row._id)}>Smart allocate replacement</button> : null}<button className="btn btn-outline btn-xs" onClick={() => silenceEmergency(row._id)}><Volume2 className="h-3 w-3" /> Stop alarm</button><button className="btn btn-success btn-xs" onClick={() => resolveEmergency(row._id)}>Resolve</button></div> }] : cfg.columns}
+          columns={resource === "emergencies" ? [...cfg.columns, { key: "action", label: "Action", render: (row) => row.status === "RESOLVED" ? "-" : user?.role === "DRIVER" || user?.role === "FACULTY_STAFF" ? <button className="btn btn-outline btn-xs" onClick={() => silenceEmergency(row._id)}><Volume2 className="h-3 w-3" /> Stop alarm</button> : <div className="flex flex-wrap gap-2">{row.status === "OPEN" ? <button className="btn btn-warning btn-xs" onClick={() => acknowledgeEmergency(row._id)}><CheckCircle2 className="h-3 w-3" /> Acknowledge</button> : null}{row.kind === "BREAKDOWN" && user?.role === "TRANSPORT_ADMIN" ? <button className="btn btn-primary btn-xs" onClick={() => smartAllocateBreakdown(row._id)}>Smart allocate replacement</button> : null}<button className="btn btn-outline btn-xs" onClick={() => silenceEmergency(row._id)}><Volume2 className="h-3 w-3" /> Stop alarm</button><button className="btn btn-success btn-xs" onClick={() => resolveEmergency(row._id)}>Resolve</button></div> }] : cfg.columns}
         /></div>
       </div>
       {canAdd ? <aside className="workspace-side-panel rounded-lg border border-slate-200 bg-white p-5">
@@ -184,8 +201,8 @@ export default function OperationsPage({ resource }) {
         : <aside className="workspace-side-panel rounded-lg border border-error/30 bg-error/5 p-5">
         <BellRing className="h-6 w-6 text-error" />
         <h3 className="mt-3 font-semibold">Emergency alerts</h3>
-        <p className="mt-2 text-sm text-slate-600">Acknowledge takes responsibility, Stop alarm only silences your browser, and Resolve closes the incident after it is handled.</p>
-        {user?.role !== "DRIVER" ? <button className={`btn mt-4 w-full ${alarmEnabled ? "btn-error" : "btn-outline"}`} onClick={() => setAlarmEnabled((enabled) => { const next = !enabled; if (next) playAlarm(); return next; })}><Volume2 className="h-4 w-4" /> {alarmEnabled ? "Audible alerts enabled" : "Enable audible alerts"}</button> : null}
+        <p className="mt-2 text-sm text-slate-600">Once enabled, the alarm rings continuously for each open incident until any responder presses Stop alarm. Acknowledging does not stop the sound; resolving closes the incident.</p>
+        {user?.role !== "DRIVER" ? <button className={`btn mt-4 w-full ${alarmEnabled ? "btn-error" : "btn-outline"}`} onClick={() => setAlarmEnabled((enabled) => { const next = !enabled; if (next) playAlarm(); return next; })}><Volume2 className="h-4 w-4" /> {alarmEnabled ? "Audible alarms enabled" : "Enable audible alarms"}</button> : null}
       </aside>}
     </section>
   );

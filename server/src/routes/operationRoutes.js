@@ -39,7 +39,7 @@ operationRoutes.get("/gps", requireRoles("FACULTY_STAFF", "DEPARTMENT_COORDINATO
 operationRoutes.get("/emergencies", requireRoles("FACULTY_STAFF", "DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"), asyncHandler(listEmergencies));
 operationRoutes.post("/emergencies", requireRoles("FACULTY_STAFF", "DRIVER", "TRANSPORT_ADMIN"), validate(emergencySchema), asyncHandler(raiseEmergency));
 operationRoutes.post("/emergencies/:id/acknowledge", requireRoles("DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"), validate(incidentNoteSchema), asyncHandler(acknowledgeEmergency));
-operationRoutes.post("/emergencies/:id/silence", requireRoles("DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"), asyncHandler(silenceEmergency));
+operationRoutes.post("/emergencies/:id/silence", requireRoles("FACULTY_STAFF", "DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"), asyncHandler(silenceEmergency));
 operationRoutes.patch("/emergencies/:id", requireRoles("DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"), validate(incidentNoteSchema), asyncHandler(resolveEmergency));
 operationRoutes.post("/breakdowns", requireRoles("FACULTY_STAFF", "DRIVER", "TRANSPORT_ADMIN"), validate(breakdownSchema), asyncHandler(breakdown));
 operationRoutes.post("/emergencies/:id/smart-allocate", requireRoles("TRANSPORT_ADMIN"), asyncHandler(smartAllocateBreakdown));

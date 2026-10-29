@@ -1,4 +1,4 @@
-import { Bus, MapPin, RadioTower } from "lucide-react";
+import { Bus, ExternalLink, MapPin, RadioTower } from "lucide-react";
 import { useEffect, useState } from "react";
 import DataTable from "../components/DataTable.jsx";
 import LoadingState from "../components/LoadingState.jsx";
@@ -32,8 +32,12 @@ export default function LiveTracking() {
   }, []);
 
   if (loading) return <LoadingState />;
-  const latest = gps[0];
+  const activeTripIds = new Set(trips.map((trip) => String(trip._id)));
+  const latest = gps.find((log) => activeTripIds.has(String(log.tripId?._id || log.tripId))) || null;
   const liveTrip = latest?.tripId;
+  const hasCoordinates = Number.isFinite(latest?.latitude) && Number.isFinite(latest?.longitude);
+  const mapUrl = hasCoordinates ? mapEmbedUrl(latest.latitude, latest.longitude) : "";
+  const mapLink = hasCoordinates ? `https://www.openstreetmap.org/?mlat=${latest.latitude}&mlon=${latest.longitude}#map=16/${latest.latitude}/${latest.longitude}` : "";
 
   return (
     <section className="responsive-map-grid">
@@ -51,13 +55,9 @@ export default function LiveTracking() {
         />
       </aside>
       <div className="min-h-[360px] rounded-lg border border-slate-200 bg-white p-4 sm:min-h-[520px] sm:p-5">
-        <div className="relative grid h-full min-h-[320px] place-items-center overflow-hidden rounded-md bg-slate-100 sm:min-h-[460px]">
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,118,110,.12)_1px,transparent_1px),linear-gradient(rgba(37,99,235,.1)_1px,transparent_1px)] bg-[size:42px_42px]" />
-          <div className="relative max-w-sm px-5 text-center">
-            <MapPin className="mx-auto h-12 w-12 text-error" />
-            <p className="mt-2 font-semibold">{latest ? "Vehicle location is live" : "Waiting for a live location update"}</p>
-            <p className="mt-1 text-sm text-slate-600">{liveTrip ? `${liveTrip.vehicleId?.vehicleId || latest.vehicleId?.vehicleId || "Assigned vehicle"} is travelling to ${liveTrip.destination || "its destination"}.` : "A driver location appears here after GPS sharing begins."}</p>
-          </div>
+        <div className="relative h-full min-h-[320px] overflow-hidden rounded-md bg-slate-100 sm:min-h-[460px]">
+          {hasCoordinates ? <iframe title="Live vehicle location map" className="absolute inset-0 h-full w-full border-0" src={mapUrl} loading="lazy" referrerPolicy="no-referrer" /> : <div className="grid h-full place-items-center bg-[linear-gradient(90deg,rgba(15,118,110,.12)_1px,transparent_1px),linear-gradient(rgba(37,99,235,.1)_1px,transparent_1px)] bg-[size:42px_42px]"><div className="max-w-sm px-5 text-center"><MapPin className="mx-auto h-12 w-12 text-error" /><p className="mt-2 font-semibold">Waiting for a live location update</p><p className="mt-1 text-sm text-slate-600">The map appears when the active driver shares GPS from the Driver workspace.</p></div></div>}
+          {hasCoordinates ? <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-950/85 px-3 py-2 text-sm text-white shadow-lg"><span>{liveTrip?.vehicleId?.vehicleId || latest.vehicleId?.vehicleId || "Vehicle"} location is live</span><a className="btn btn-xs border-0 bg-white text-slate-900 hover:bg-slate-100" href={mapLink} target="_blank" rel="noreferrer"><ExternalLink className="h-3 w-3" /> Open map</a></div> : null}
         </div>
       </div>
       <aside className="rounded-lg border border-slate-200 bg-white p-5">
@@ -81,4 +81,10 @@ export default function LiveTracking() {
       </aside>
     </section>
   );
+}
+
+function mapEmbedUrl(latitude, longitude) {
+  const span = 0.01;
+  const bbox = [longitude - span, latitude - span, longitude + span, latitude + span].join(",");
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${latitude},${longitude}`)}`;
 }

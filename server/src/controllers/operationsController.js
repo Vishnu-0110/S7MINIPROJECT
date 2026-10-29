@@ -260,13 +260,23 @@ export async function acknowledgeEmergency(req, res) {
 export async function silenceEmergency(req, res) {
   const alert = await EmergencyAlert.findById(req.params.id);
   if (!alert) { const error = new Error("Emergency alert not found"); error.status = 404; throw error; }
-  await assertIncidentManager(alert, req.user);
-  if (!alert.silencedBy.some((entry) => String(entry.userId) === String(req.user._id))) {
+  const trip = await Trip.findById(alert.tripId).select("facultyId driverId departmentId");
+  const driver = req.user.role === "DRIVER" ? await Driver.findOne({ userId: req.user._id }).select("_id") : null;
+  const canStopAlarm = req.user.role === "TRANSPORT_ADMIN"
+    || (req.user.role === "FACULTY_STAFF" && String(trip?.facultyId) === String(req.user._id))
+    || (req.user.role === "DEPARTMENT_COORDINATOR" && String(trip?.departmentId) === String(req.user.departmentId))
+    || (driver && String(trip?.driverId) === String(driver._id));
+  if (!canStopAlarm) { const error = new Error("You are not authorized to stop this alarm."); error.status = 403; throw error; }
+  if (!alert.alarmStoppedAt) {
+    alert.alarmStoppedAt = new Date();
+    alert.alarmStoppedBy = req.user._id;
     alert.silencedBy.push({ userId: req.user._id });
-    alert.events.push({ action: "ALARM_SILENCED", actorId: req.user._id });
+    alert.events.push({ action: "ALARM_STOPPED", actorId: req.user._id, note: "Audible alarm stopped for all responders." });
     await alert.save();
   }
-  return ok(res, "Alarm silenced for your session", alert);
+  req.app.get("io")?.to("admin-room").emit("emergency:updated", alert);
+  if (trip) req.app.get("io")?.to(`coordinator-room-${trip.departmentId}`).emit("emergency:updated", alert);
+  return ok(res, "Alarm stopped for all responders. The incident remains open until it is resolved.", alert);
 }
 
 export async function resolveEmergency(req, res) {

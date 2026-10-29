@@ -118,6 +118,8 @@ const emergencyAlertSchema = new mongoose.Schema(
     resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     resolvedAt: Date,
     resolutionNotes: String,
+    alarmStoppedAt: Date,
+    alarmStoppedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     silencedBy: [{ userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, at: { type: Date, default: Date.now } }],
     events: [{ action: String, actorId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, note: String, at: { type: Date, default: Date.now } }]
   },

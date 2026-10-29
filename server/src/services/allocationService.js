@@ -9,6 +9,13 @@ const defaultWeights = {
   driver: 10
 };
 
+export const MAX_ALLOCATION_SPARE_SEATS = 5;
+
+export function isCapacityFit(vehicle, passengerCount) {
+  const spareCapacity = Number(vehicle.capacity) - Number(passengerCount);
+  return spareCapacity >= 0 && spareCapacity <= MAX_ALLOCATION_SPARE_SEATS;
+}
+
 function clamp(value) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -68,7 +75,7 @@ export async function scoreVehicleForRequest({ request, vehicle, driver, mainten
   const passengerCount = request.passengerCount || 1;
   const distanceKm = estimateDistanceKm(request);
   const spareCapacity = vehicle.capacity - passengerCount;
-  const capacityScore = spareCapacity < 0 ? 0 : clamp(100 - Math.min(spareCapacity * 2, 45));
+  const capacityScore = isCapacityFit(vehicle, passengerCount) ? clamp(100 - spareCapacity * 2) : 0;
   const facilityCompatible = vehicleSupportsRequest(vehicle, request);
   const availabilityScore = vehicle.status === "AVAILABLE" && !vehicleConflict && facilityCompatible ? 100 : 0;
   const distanceScore = clamp((vehicle.mileageKmPerLiter || 4) * 14 - distanceKm / 10);
@@ -85,7 +92,7 @@ export async function scoreVehicleForRequest({ request, vehicle, driver, mainten
 
   const estimatedCost = Math.round((distanceKm / (vehicle.mileageKmPerLiter || 4)) * 95 + distanceKm * 8);
   const reasons = [];
-  if (capacityScore > 0) reasons.push("Capacity suitable");
+  if (capacityScore > 0) reasons.push(spareCapacity === 0 ? "Exact passenger capacity" : `${spareCapacity} spare seats (within 5-seat buffer)`);
   if (availabilityScore === 100) reasons.push("Vehicle available");
   if (facilityCompatible && request.requiredFacilities?.length) reasons.push("Required facilities available");
   if (driverAvailabilityScore === 100) reasons.push("Driver available");

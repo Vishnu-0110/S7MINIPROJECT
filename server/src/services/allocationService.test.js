@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { scoreVehicleForRequest, vehicleSupportsRequest } from "./allocationService.js";
+import { isCapacityFit, scoreVehicleForRequest, vehicleSupportsRequest } from "./allocationService.js";
+
+test("smart allocation accepts exact capacity or a maximum five-seat buffer", () => {
+  assert.equal(isCapacityFit({ capacity: 50 }, 50), true);
+  assert.equal(isCapacityFit({ capacity: 55 }, 50), true);
+  assert.equal(isCapacityFit({ capacity: 60 }, 50), false);
+  assert.equal(isCapacityFit({ capacity: 49 }, 50), false);
+});
 
 test("smart allocation favors a suitable available vehicle with available driver", async () => {
   const result = await scoreVehicleForRequest({
@@ -16,7 +23,7 @@ test("smart allocation favors a suitable available vehicle with available driver
   assert.equal(result.capacityScore > 0, true);
   assert.equal(result.availabilityScore, 100);
   assert.equal(result.driverAvailabilityScore, 100);
-  assert.equal(result.reasons.includes("Capacity suitable"), true);
+  assert.equal(result.reasons.includes("2 spare seats (within 5-seat buffer)"), true);
 });
 
 test("smart allocation rejects undersized vehicles through capacity score", async () => {
