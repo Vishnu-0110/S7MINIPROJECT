@@ -283,7 +283,13 @@ export default function TripDetails() {
           {user.role === "TRANSPORT_ADMIN" ? <p>Faculty rating: {trip.facultyRating ? `${trip.facultyRating} / 5` : "Awaiting rating"}</p> : null}
         </div>
         {message ? <div className="alert mt-4">{message}</div> : null}
-        {trip.replacementStatus && trip.replacementStatus !== "NONE" ? <div className="alert alert-warning mt-4">Replacement status: {trip.replacementStatus.replaceAll("_", " ")}</div> : null}
+        {trip.replacementStatus === "VERIFICATION_PENDING" ? (
+          <div className="alert mt-4 border border-teal-200 bg-teal-50 text-teal-950">
+            <span className="font-semibold">Replacement assigned.</span> The vehicle and driver shown above are the current assignment. Show the refreshed QR code to the new driver so the trip can safely resume.
+          </div>
+        ) : trip.replacementStatus && trip.replacementStatus !== "NONE" ? (
+          <div className="alert alert-warning mt-4">Replacement status: {trip.replacementStatus.replaceAll("_", " ")}</div>
+        ) : null}
       </div>
       <aside className="space-y-4">
         <div className="rounded-lg border border-slate-200 bg-white p-5">
