@@ -6,6 +6,7 @@ import LoadingState from "../components/LoadingState.jsx";
 import { api } from "../lib/api.js";
 import { useAuthStore } from "../store/authStore.js";
 import { formatIndiaDateTime } from "../lib/dateTime.js";
+import { connectSocket } from "../lib/socket.js";
 
 export default function TripDetails() {
   const { id } = useParams();
@@ -52,6 +53,28 @@ export default function TripDetails() {
 
   useEffect(() => {
     load();
+  }, [id, user.role]);
+
+  useEffect(() => {
+    const socket = connectSocket();
+    const joinTrip = () => socket.emit("trip:join", id);
+    const onReallocated = (event) => {
+      if (String(event?.tripId) !== String(id)) return;
+      setQr("");
+      setCompletionQr("");
+      setCompletionToken("");
+      setStartStep("kilometre");
+      setMessage("A replacement vehicle and driver have been assigned. The previous assignment has been removed; a refreshed QR code is ready.");
+      load();
+    };
+    socket.on("connect", joinTrip);
+    socket.on("trip:reallocated", onReallocated);
+    if (socket.connected) joinTrip();
+    return () => {
+      socket.emit("trip:leave", id);
+      socket.off("connect", joinTrip);
+      socket.off("trip:reallocated", onReallocated);
+    };
   }, [id, user.role]);
 
   useEffect(() => {

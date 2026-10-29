@@ -3,10 +3,17 @@ import DataTable from "../components/DataTable.jsx";
 import LoadingState from "../components/LoadingState.jsx";
 import { useApiResource } from "../hooks/useApiResource.js";
 import { formatIndiaDateTime } from "../lib/dateTime.js";
+import { connectSocket } from "../lib/socket.js";
+import { useEffect } from "react";
 
 export default function Trips() {
-  const { data, loading, error } = useApiResource("/trips");
+  const { data, loading, error, reload } = useApiResource("/trips");
   const trips = Array.isArray(data) ? data : [];
+  useEffect(() => {
+    const socket = connectSocket();
+    socket.on("trip:reallocated", reload);
+    return () => socket.off("trip:reallocated", reload);
+  }, [reload]);
   if (loading) return <LoadingState />;
 
   return (

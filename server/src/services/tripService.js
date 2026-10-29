@@ -269,8 +269,11 @@ export async function reassignTrip({ tripId, allocation, actor, allowCapacityOve
     await VehicleAllocation.findByIdAndUpdate(allocation._id, { isSelected: true, reallocationForTripId: trip._id }, { session });
     await session.commitTransaction();
     await notifyTripParticipants(trip, "Replacement vehicle assigned", `Trip ${trip.tripId} has a replacement vehicle. The faculty member must show the updated QR code to the driver.`);
-    emit("admin-room", "trip:reallocated", { tripId: trip._id, vehicleId: vehicle._id, driverId: driver._id });
-    emit(`driver-room-${driver._id}`, "trip:updated", { tripId: trip._id, replacement: true });
+    const replacementEvent = { tripId: String(trip._id), vehicleId: String(vehicle._id), driverId: String(driver._id), replacement: true };
+    emit("admin-room", "trip:reallocated", replacementEvent);
+    emit(`user-room-${trip.facultyId}`, "trip:reallocated", replacementEvent);
+    emit(`trip-room-${trip._id}`, "trip:reallocated", replacementEvent);
+    emit(`driver-room-${driver._id}`, "trip:updated", replacementEvent);
     return trip;
   } catch (error) {
     await session.abortTransaction();
