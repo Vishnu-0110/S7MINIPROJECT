@@ -66,7 +66,7 @@ export default function NavigationPage() {
           <div className="stat rounded-xl border border-slate-200 bg-white shadow-sm"><div className="stat-title">Destination</div><div className="stat-value truncate text-lg">{trip.destination}</div></div>
         </div>
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <GoogleRouteMap route={route} destinationName={trip.destination} />
+          <LeafletRouteMap route={route} destinationName={trip.destination} />
           <div className="app-surface p-4">
             <div className="flex items-center gap-2"><Navigation className="h-5 w-5 text-primary" /><h3 className="font-semibold">Driving directions</h3></div>
             <p className="mt-1 text-xs text-slate-500">Follow the route shown below. Refresh to recalculate from your latest position.</p>
@@ -80,9 +80,10 @@ export default function NavigationPage() {
   );
 }
 
-function GoogleRouteMap({ route, destinationName }) {
+function LeafletRouteMap({ route, destinationName }) {
   const mapRef = useRef(null);
-  const rendererRef = useRef(null);
+  const leafletMapRef = useRef(null);
+  const routeLayerRef = useRef(null);
   const [mapError, setMapError] = useState("");
 
   useEffect(() => {
@@ -90,73 +91,68 @@ function GoogleRouteMap({ route, destinationName }) {
     async function renderMap() {
       try {
         setMapError("");
-        const google = await loadGoogleMaps();
+        const L = await loadLeaflet();
         if (cancelled || !mapRef.current) return;
-        const [startLongitude, startLatitude] = route.geometry.coordinates[0];
-        const { latitude, longitude } = route.destination;
-        const map = new google.maps.Map(mapRef.current, {
-          center: { lat: startLatitude, lng: startLongitude },
-          zoom: 13,
-          mapTypeControl: true,
-          streetViewControl: false,
-          fullscreenControl: true,
-          zoomControl: true,
-          mapTypeId: "roadmap"
-        });
-        const service = new google.maps.DirectionsService();
-        service.route({
-          origin: { lat: startLatitude, lng: startLongitude },
-          destination: { lat: latitude, lng: longitude },
-          travelMode: google.maps.TravelMode.DRIVING,
-          provideRouteAlternatives: false
-        }, (result, status) => {
-          if (cancelled) return;
-          if (status !== "OK" || !result) {
-            setMapError(`Google Maps could not calculate this route (${status}).`);
-            return;
-          }
-          rendererRef.current?.setMap(null);
-          rendererRef.current = new google.maps.DirectionsRenderer({
-            map,
-            directions: result,
-            routeIndex: 0,
-            suppressMarkers: false,
-            polylineOptions: { strokeColor: "#2563eb", strokeOpacity: 0.95, strokeWeight: 6 }
-          });
-        });
+        if (!leafletMapRef.current) {
+          leafletMapRef.current = L.map(mapRef.current, { zoomControl: true, attributionControl: true });
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" }).addTo(leafletMapRef.current);
+        }
+        const map = leafletMapRef.current;
+        routeLayerRef.current?.clearLayers();
+        const layer = L.layerGroup().addTo(map);
+        routeLayerRef.current = layer;
+        const points = route.geometry.coordinates.map(([longitude, latitude]) => [latitude, longitude]);
+        L.polyline(points, { color: "#ffffff", weight: 12, opacity: 0.95, lineCap: "round", lineJoin: "round" }).addTo(layer);
+        L.polyline(points, { color: "#2563eb", weight: 6, opacity: 0.98, lineCap: "round", lineJoin: "round" }).addTo(layer);
+        const start = points[0];
+        const destination = [route.destination.latitude, route.destination.longitude];
+        L.circleMarker(start, { radius: 10, color: "#ffffff", weight: 4, fillColor: "#0f766e", fillOpacity: 1 }).bindTooltip("Your current location").addTo(layer);
+        L.circleMarker(destination, { radius: 10, color: "#ffffff", weight: 4, fillColor: "#dc2626", fillOpacity: 1 }).bindTooltip(destinationName).addTo(layer);
+        map.fitBounds(L.latLngBounds(points.concat([destination])), { padding: [35, 35], maxZoom: 16, animate: true });
+        window.setTimeout(() => map.invalidateSize(), 100);
       } catch (error) {
         if (!cancelled) setMapError(error.message);
       }
     }
     renderMap();
-    return () => { cancelled = true; rendererRef.current?.setMap(null); rendererRef.current = null; };
+    return () => { cancelled = true; };
   }, [route]);
+
+  useEffect(() => () => {
+    leafletMapRef.current?.remove();
+    leafletMapRef.current = null;
+  }, []);
 
   return (
     <div className="relative h-[28rem] overflow-hidden rounded-2xl border border-slate-300 bg-slate-200 shadow-sm">
       <div className="h-full w-full" ref={mapRef} />
-      {mapError ? <div className="absolute inset-4 flex items-center justify-center rounded-xl bg-white/95 p-6 text-center text-sm text-error shadow"><div><MapPin className="mx-auto mb-2 h-8 w-8" /><p className="font-semibold">Google Maps is not available</p><p className="mt-1">{mapError}</p><p className="mt-3 text-xs text-slate-500">Add VITE_GOOGLE_MAPS_API_KEY to the client environment and enable Maps JavaScript API, Directions API, and Places API.</p></div></div> : null}
+      {mapError ? <div className="absolute inset-4 flex items-center justify-center rounded-xl bg-white/95 p-6 text-center text-sm text-error shadow"><div><MapPin className="mx-auto mb-2 h-8 w-8" /><p className="font-semibold">Map could not be loaded</p><p className="mt-1">{mapError}</p><p className="mt-3 text-xs text-slate-500">Check the network connection and refresh the route.</p></div></div> : null}
       <div className="absolute left-3 top-3 rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold shadow"><LocateFixed className="mr-1 inline h-4 w-4 text-teal-700" /> Live driver route</div>
       <div className="absolute right-3 top-3 rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold shadow"><MapPin className="mr-1 inline h-4 w-4 text-red-600" /> {destinationName}</div>
     </div>
   );
 }
 
-function loadGoogleMaps() {
-  if (window.google?.maps) return Promise.resolve(window.google);
-  const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-  if (!key) return Promise.reject(new Error("Google Maps API key is missing."));
-  if (window.googleMapsLoader) return window.googleMapsLoader;
-  window.googleMapsLoader = new Promise((resolve, reject) => {
+function loadLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (window.leafletLoader) return window.leafletLoader;
+  window.leafletLoader = new Promise((resolve, reject) => {
+    if (!document.getElementById("smartfleet-leaflet-css")) {
+      const stylesheet = document.createElement("link");
+      stylesheet.id = "smartfleet-leaflet-css";
+      stylesheet.rel = "stylesheet";
+      stylesheet.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(stylesheet);
+    }
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places`;
+    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
     script.async = true;
     script.defer = true;
-    script.onload = () => window.google?.maps ? resolve(window.google) : reject(new Error("Google Maps loaded without the Maps API."));
-    script.onerror = () => reject(new Error("Google Maps could not be loaded. Check the API key and network connection."));
+    script.onload = () => window.L ? resolve(window.L) : reject(new Error("The map library loaded without Leaflet."));
+    script.onerror = () => reject(new Error("The map library could not be loaded. Check the network connection."));
     document.head.appendChild(script);
   });
-  return window.googleMapsLoader;
+  return window.leafletLoader;
 }
 
 function RouteMap({ route, destinationName }) {
