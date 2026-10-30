@@ -119,9 +119,7 @@ export default function TripDetails() {
       setMessage("Enter a valid starting kilometre reading before verifying the OTP.");
       return;
     }
-    const otp = form.startOtp?.trim();
-    const verified = await verify(otp);
-    if (verified && trip.status === "SCHEDULED") await startTrip(otp);
+    await startTrip(form.startOtp?.trim());
   }
 
   async function end() {

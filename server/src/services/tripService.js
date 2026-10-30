@@ -413,13 +413,14 @@ export async function startTrip({ tripId, actor, startKM, qrToken, location }) {
     error.status = 403;
     throw error;
   }
-  if (!trip.qrVerifiedAt) {
-    const error = new Error("OTP verification is required before starting this trip.");
+  if (!qrToken || trip.qrToken !== qrToken) {
+    const error = new Error("Enter the valid six-digit trip OTP before starting.");
     error.status = 400;
     throw error;
   }
-  if (!qrToken || trip.qrToken !== qrToken) {
-    const error = new Error("Enter and verify the trip OTP before starting.");
+  const otpWasPreviouslyVerified = Boolean(trip.qrVerifiedAt);
+  if (!otpWasPreviouslyVerified && (trip.qrConsumed || (trip.qrExpiresAt && trip.qrExpiresAt < new Date()))) {
+    const error = new Error("This trip OTP is expired or already used. Ask the faculty member to refresh the trip page for a new OTP.");
     error.status = 400;
     throw error;
   }
@@ -428,13 +429,16 @@ export async function startTrip({ tripId, actor, startKM, qrToken, location }) {
     error.status = 400;
     throw error;
   }
+  const startCriteria = otpWasPreviouslyVerified
+    ? { _id: trip._id, status: "SCHEDULED", qrVerifiedAt: { $exists: true } }
+    : { _id: trip._id, status: "SCHEDULED", qrToken, qrConsumed: false, qrExpiresAt: { $gt: new Date() } };
   const started = await Trip.findOneAndUpdate(
-    { _id: trip._id, status: "SCHEDULED", qrVerifiedAt: { $exists: true } },
-    { startKM: Number(startKM), startTime: new Date(), status: "TRIP_STARTED", startLocation: location ? { ...location, recordedAt: new Date() } : undefined },
+    startCriteria,
+    { startKM: Number(startKM), startTime: new Date(), status: "TRIP_STARTED", qrVerifiedAt: trip.qrVerifiedAt || new Date(), qrConsumed: true, startLocation: location ? { ...location, recordedAt: new Date() } : undefined },
     { new: true }
   );
   if (!started) {
-    const error = new Error("Trip start was already processed or OTP verification is required.");
+    const error = new Error("Trip start was already processed or the OTP is no longer valid.");
     error.status = 409;
     throw error;
   }
