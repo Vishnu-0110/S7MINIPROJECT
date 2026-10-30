@@ -54,7 +54,7 @@ export default function App() {
         <Route path="departments" element={<Shell roles={["TRANSPORT_ADMIN"]}><ManagementPage resource="departments" /></Shell>} />
         <Route path="maintenance" element={<Shell roles={["TRANSPORT_ADMIN"]}><OperationsPage resource="maintenance" /></Shell>} />
         <Route path="fuel" element={<Shell roles={["DRIVER", "TRANSPORT_ADMIN"]}><OperationsPage resource="fuel" /></Shell>} />
-        <Route path="expenses" element={<Shell roles={["TRANSPORT_ADMIN"]}><OperationsPage resource="expenses" /></Shell>} />
+        <Route path="expenses" element={<Shell roles={["DRIVER", "TRANSPORT_ADMIN"]}><OperationsPage resource="expenses" /></Shell>} />
         <Route path="emergencies" element={<Shell roles={["DRIVER", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"]}><OperationsPage resource="emergencies" /></Shell>} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="reports" element={<Shell roles={["TRANSPORT_ADMIN"]}><Reports /></Shell>} />
