@@ -5,6 +5,7 @@ import LoadingState from "../components/LoadingState.jsx";
 import { useApiResource } from "../hooks/useApiResource.js";
 import { api } from "../lib/api.js";
 import { formatIndiaDateTime } from "../lib/dateTime.js";
+import { openTripNavigation } from "../lib/navigation.js";
 import { connectSocket } from "../lib/socket.js";
 
 export default function DriverDashboard() {
@@ -105,6 +106,15 @@ function TripActionCard({ trip, reload }) {
     }
   }
 
+  async function navigateToDestination() {
+    try {
+      const location = await currentLocation();
+      openTripNavigation(trip.destination, location);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
   return (
     <article className="rounded-xl border border-primary/20 bg-primary/5 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -119,7 +129,10 @@ function TripActionCard({ trip, reload }) {
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         <Link className="btn btn-primary btn-sm" to={`/trips/${trip._id}`}><KeyRound className="h-4 w-4" /> {isActive ? "Open trip" : isCompletionPending ? "Open completion OTP" : "Enter OTP & start"}</Link>
-        {isActive ? <button className="btn btn-secondary btn-sm" onClick={sendLocation}><Navigation className="h-4 w-4" /> Share location</button> : null}
+        {isActive ? <>
+          <button className="btn btn-secondary btn-sm" onClick={navigateToDestination}><Navigation className="h-4 w-4" /> Navigate to destination</button>
+          <button className="btn btn-outline btn-sm" onClick={sendLocation}><Navigation className="h-4 w-4" /> Share location</button>
+        </> : null}
         {!isCompletionPending ? <button className="btn btn-error btn-sm" onClick={() => setIncidentPanelOpen((open) => !open)} disabled={incidentBusy}><AlertTriangle className="h-4 w-4" /> Emergency alert</button> : null}
       </div>
       {message ? <div className="alert mt-4">{message}</div> : null}

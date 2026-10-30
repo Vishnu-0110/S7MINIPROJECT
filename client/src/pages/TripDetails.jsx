@@ -5,6 +5,7 @@ import LoadingState from "../components/LoadingState.jsx";
 import { api } from "../lib/api.js";
 import { useAuthStore } from "../store/authStore.js";
 import { formatIndiaDateTime } from "../lib/dateTime.js";
+import { openTripNavigation, tripNavigationUrl } from "../lib/navigation.js";
 import { connectSocket } from "../lib/socket.js";
 
 export default function TripDetails() {
@@ -121,15 +122,23 @@ export default function TripDetails() {
       setMessage("Enter a valid starting kilometre reading before starting the trip.");
       return;
     }
+    // Open a tab from the driver's click before async GPS/API work, so mobile
+    // browsers can allow the navigation handoff after the trip starts.
+    const navigationTab = window.open("about:blank", "_blank");
     try {
+      const location = await currentLocation();
       await api.post(`/trips/${id}/start`, {
         startKM,
         otp,
-        location: await currentLocation()
+        location
       });
       setMessage("Trip started. You can now share GPS updates.");
+      if (navigationTab) {
+        navigationTab.location.href = tripNavigationUrl(trip.destination, location);
+      }
       await load();
     } catch (error) {
+      navigationTab?.close();
       setMessage(error.message);
     }
   }
@@ -151,6 +160,15 @@ export default function TripDetails() {
       });
       setMessage("Ending odometer saved. The driver now has a six-digit completion OTP for the faculty member.");
       await load();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function navigateToDestination() {
+    try {
+      const location = await currentLocation();
+      openTripNavigation(trip.destination, location);
     } catch (error) {
       setMessage(error.message);
     }
@@ -293,6 +311,7 @@ export default function TripDetails() {
                   <button className="btn btn-primary mt-3 w-full" onClick={submitStartOtp}><KeyRound className="h-4 w-4" /> Verify OTP and start trip</button>
                 </div>
               </> : null}
+              {["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status) ? <button className="btn btn-secondary w-full" onClick={navigateToDestination}><Navigation className="h-4 w-4" /> Navigate to destination</button> : null}
               {["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status) ? <button className="btn btn-error w-full" onClick={() => reportIncident("breakdown")} disabled={incidentBusy}><Wrench className="h-4 w-4" /> Report breakdown</button> : null}
               {["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED", "TRANSFER_OR_VERIFICATION_PENDING"].includes(trip.status) ? <button className="btn btn-error btn-outline w-full" onClick={() => reportIncident("emergency")} disabled={incidentBusy}><AlertTriangle className="h-4 w-4" /> Emergency alert</button> : null}
               {["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status) ? <>
