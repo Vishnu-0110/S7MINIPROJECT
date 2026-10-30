@@ -1,4 +1,4 @@
-import { AlertTriangle, Fuel, Navigation, QrCode } from "lucide-react";
+import { AlertTriangle, Fuel, KeyRound, Navigation } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useEffect } from "react";
 import LoadingState from "../components/LoadingState.jsx";
@@ -43,7 +43,7 @@ export default function DriverDashboard() {
         <div>
           <p className="text-sm font-medium text-primary">Driver workspace</p>
           <h2 className="text-xl font-semibold text-slate-950">Today’s trips</h2>
-          <p className="mt-1 text-sm text-slate-500">Verify the QR code before starting. Location sharing is available only while a trip is active.</p>
+          <p className="mt-1 text-sm text-slate-500">Verify the faculty OTP before starting. Location sharing is available only while a trip is active.</p>
         </div>
         <Link className="btn btn-outline btn-sm" to="/fuel"><Fuel className="h-4 w-4" /> Fuel log</Link>
       </div>
@@ -99,7 +99,7 @@ function TripActionCard({ trip, reload }) {
         <span className="badge badge-primary">{trip.status.replaceAll("_", " ")}</span>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <Link className="btn btn-primary btn-sm" to={`/trips/${trip._id}`}><QrCode className="h-4 w-4" /> {isActive ? "Open trip" : isCompletionPending ? "Open completion QR" : "Verify & start"}</Link>
+        <Link className="btn btn-primary btn-sm" to={`/trips/${trip._id}`}><KeyRound className="h-4 w-4" /> {isActive ? "Open trip" : isCompletionPending ? "Open completion OTP" : "Enter OTP & start"}</Link>
         {isActive ? <button className="btn btn-secondary btn-sm" onClick={sendLocation}><Navigation className="h-4 w-4" /> Share location</button> : null}
         {!isCompletionPending ? <button className="btn btn-error btn-sm" onClick={reportEmergency}><AlertTriangle className="h-4 w-4" /> Emergency</button> : null}
       </div>

@@ -6,6 +6,6 @@ export function humanId(prefix) {
   return `${prefix}-${stamp}-${rand}`;
 }
 
-export function makeQrToken() {
-  return crypto.randomBytes(32).toString("base64url");
+export function makeTripOtp() {
+  return crypto.randomInt(100000, 1000000).toString();
 }

@@ -1,7 +1,7 @@
 import { Driver, Trip, VehicleRequest } from "../models/index.js";
 import { ApiError, ok } from "../utils/apiResponse.js";
 import { parsePagination, paginationPayload } from "../utils/pagination.js";
-import { cancelScheduledTrip, completeTrip, createTripFromAssignment, generateCompletionQr, generateTripQr, requestTripCompletion, saveGps, startTrip, verifyQr } from "../services/tripService.js";
+import { cancelScheduledTrip, completeTrip, createTripFromAssignment, generateCompletionOtp, generateTripOtp, requestTripCompletion, saveGps, startTrip, verifyQr } from "../services/tripService.js";
 import { indiaDayRange, isTodayInIndia } from "../utils/indiaTime.js";
 
 export async function assignTrip(req, res) {
@@ -86,39 +86,39 @@ export async function getTrip(req, res) {
   return ok(res, "Trip details", data);
 }
 
-export async function tripQr(req, res) {
+export async function tripOtp(req, res) {
   const trip = await Trip.findById(req.params.id).select("facultyId departmentId driverId scheduledStartTime status");
   await assertTripAccess(trip, req.user);
   if (req.user.role === "DRIVER") {
-    throw new ApiError("The faculty member must display the trip QR code for the driver to scan.", 403);
+    throw new ApiError("The faculty member must display the trip OTP for the driver to enter.", 403);
   }
   const isReplacementVerification = ["TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip.status);
   if (!isReplacementVerification && !isTodayInIndia(trip.scheduledStartTime)) {
-    throw new ApiError("The trip QR code is available on the scheduled trip date.", 403);
+    throw new ApiError("The trip OTP is available on the scheduled trip date.", 403);
   }
-  const payload = { qr: await generateTripQr(req.params.id) };
-  return ok(res, "QR generated", payload);
+  const payload = { otp: await generateTripOtp(req.params.id) };
+  return ok(res, "Trip OTP generated", payload);
 }
 
-export async function verifyTripQr(req, res) {
+export async function verifyTripOtp(req, res) {
   const driver = await Driver.findOne({ userId: req.user._id });
-  return ok(res, "QR verified", await verifyQr({ tripId: req.params.id, qrToken: req.body.qrToken, driver }));
+  return ok(res, "OTP verified", await verifyQr({ tripId: req.params.id, qrToken: req.body.otp, driver }));
 }
 
 export async function startTripAction(req, res) {
-  return ok(res, "Trip started", await startTrip({ tripId: req.params.id, actor: req.user, ...req.body }));
+  return ok(res, "Trip started", await startTrip({ tripId: req.params.id, actor: req.user, ...req.body, qrToken: req.body.otp }));
 }
 
 export async function endTripAction(req, res) {
   return ok(res, "Ending odometer saved. Faculty confirmation is required.", await requestTripCompletion({ tripId: req.params.id, actor: req.user, ...req.body }));
 }
 
-export async function completionQr(req, res) {
-  return ok(res, "Completion QR generated", { qr: await generateCompletionQr(req.params.id, req.user) });
+export async function completionOtp(req, res) {
+  return ok(res, "Completion OTP generated", { otp: await generateCompletionOtp(req.params.id, req.user) });
 }
 
 export async function completeTripAction(req, res) {
-  return ok(res, "Trip completed", await completeTrip({ tripId: req.params.id, actor: req.user, ...req.body }));
+  return ok(res, "Trip completed", await completeTrip({ tripId: req.params.id, actor: req.user, ...req.body, qrToken: req.body.otp }));
 }
 
 export async function cancelTripAction(req, res) {

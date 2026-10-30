@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import QRCode from "qrcode";
 import {
   Driver,
   GpsLog,
@@ -9,7 +8,7 @@ import {
   VehicleRequest,
   User
 } from "../models/index.js";
-import { humanId, makeQrToken } from "../utils/id.js";
+import { humanId, makeTripOtp } from "../utils/id.js";
 import { audit } from "./auditService.js";
 import { assertNoDoubleBooking } from "./bookingService.js";
 import { notify, notifyMany } from "./notificationService.js";
@@ -124,7 +123,7 @@ export async function createTripFromAssignment({ requestId, vehicleId, driverId,
     }
 
     const tripId = request.requestId;
-    const qrToken = makeQrToken(tripId);
+    const qrToken = makeTripOtp();
     const estimatedCost = allocation?.estimatedCost || 0;
 
     const trip = await Trip.create(
@@ -259,7 +258,7 @@ export async function reassignTrip({ tripId, allocation, actor, allowCapacityOve
     trip.driverId = driver._id;
     trip.status = "TRANSFER_OR_VERIFICATION_PENDING";
     trip.replacementStatus = "VERIFICATION_PENDING";
-    trip.qrToken = makeQrToken(trip.tripId);
+    trip.qrToken = makeTripOtp();
     trip.qrVerifiedAt = undefined;
     trip.qrConsumed = false;
     // A breakdown can happen after the original expected return time or cross
@@ -271,7 +270,7 @@ export async function reassignTrip({ tripId, allocation, actor, allowCapacityOve
     if (String(oldDriverId) !== String(driver._id)) await Driver.findByIdAndUpdate(oldDriverId, { status: "AVAILABLE" }, { session });
     await VehicleAllocation.findByIdAndUpdate(allocation._id, { isSelected: true, reallocationForTripId: trip._id }, { session });
     await session.commitTransaction();
-    await notifyTripParticipants(trip, "Replacement vehicle assigned", `Trip ${trip.tripId} has a replacement vehicle. The faculty member must show the updated QR code to the driver.`);
+    await notifyTripParticipants(trip, "Replacement vehicle assigned", `Trip ${trip.tripId} has a replacement vehicle. The faculty member must give the updated OTP to the driver.`);
     const replacementEvent = { tripId: String(trip._id), vehicleId: String(vehicle._id), driverId: String(driver._id), replacement: true };
     emit("admin-room", "trip:reallocated", replacementEvent);
     emit(`user-room-${trip.facultyId}`, "trip:reallocated", replacementEvent);
@@ -336,17 +335,17 @@ export async function cancelScheduledTrip({ tripId, actor, reason }) {
   }
 }
 
-export async function generateTripQr(trip) {
+export async function generateTripOtp(trip) {
   const freshTrip = await Trip.findById(trip._id || trip).select("+qrToken");
   if (!freshTrip) throw new Error("Trip not found");
-  if (freshTrip.qrExpiresAt < new Date() && ["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING"].includes(freshTrip.status)) {
-    freshTrip.qrToken = makeQrToken(freshTrip.tripId);
+  if ((freshTrip.qrExpiresAt < new Date() || !/^\d{6}$/.test(freshTrip.qrToken || "")) && ["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING"].includes(freshTrip.status)) {
+    freshTrip.qrToken = makeTripOtp();
     freshTrip.qrConsumed = false;
     freshTrip.qrVerifiedAt = undefined;
     freshTrip.qrExpiresAt = new Date(Math.max(new Date(freshTrip.scheduledEndTime).getTime(), Date.now() + 2 * 60 * 60 * 1000));
     await freshTrip.save();
   }
-  return QRCode.toDataURL(freshTrip.qrToken);
+  return freshTrip.qrToken;
 }
 
 export async function verifyQr({ tripId, qrToken, driver }) {
@@ -357,23 +356,23 @@ export async function verifyQr({ tripId, qrToken, driver }) {
     throw error;
   }
   if (String(trip.driverId._id) !== String(driver._id)) {
-    const error = new Error("Unauthorized QR scan");
+    const error = new Error("Unauthorized OTP verification");
     error.status = 403;
     throw error;
   }
   const isReplacementVerification = ["TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip.status);
   if (!isReplacementVerification && !isTodayInIndia(trip.scheduledStartTime)) {
-    const error = new Error("QR verification is available only on the scheduled trip date.");
+    const error = new Error("OTP verification is available only on the scheduled trip date.");
     error.status = 403;
     throw error;
   }
   if (!["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip.status)) {
-    const error = new Error("Only scheduled trips can be QR verified.");
+    const error = new Error("Only scheduled trips can be OTP verified.");
     error.status = 400;
     throw error;
   }
   if (trip.qrToken !== qrToken || trip.qrConsumed || (trip.qrExpiresAt && trip.qrExpiresAt < new Date())) {
-    const error = new Error("Invalid, expired, or reused QR");
+    const error = new Error("Invalid, expired, or already used OTP");
     error.status = 400;
     throw error;
   }
@@ -384,7 +383,7 @@ export async function verifyQr({ tripId, qrToken, driver }) {
     { new: true }
   );
   if (!verified) {
-    const error = new Error("QR code has already been used or is no longer valid.");
+    const error = new Error("OTP has already been used or is no longer valid.");
     error.status = 409;
     throw error;
   }
@@ -415,12 +414,12 @@ export async function startTrip({ tripId, actor, startKM, qrToken, location }) {
     throw error;
   }
   if (!trip.qrVerifiedAt) {
-    const error = new Error("QR verification is required before starting this trip.");
+    const error = new Error("OTP verification is required before starting this trip.");
     error.status = 400;
     throw error;
   }
   if (!qrToken || trip.qrToken !== qrToken) {
-    const error = new Error("Scan and verify the QR code for this trip before starting.");
+    const error = new Error("Enter and verify the trip OTP before starting.");
     error.status = 400;
     throw error;
   }
@@ -435,7 +434,7 @@ export async function startTrip({ tripId, actor, startKM, qrToken, location }) {
     { new: true }
   );
   if (!started) {
-    const error = new Error("Trip start was already processed or QR verification is required.");
+    const error = new Error("Trip start was already processed or OTP verification is required.");
     error.status = 409;
     throw error;
   }
@@ -444,7 +443,7 @@ export async function startTrip({ tripId, actor, startKM, qrToken, location }) {
   if (location) {
     await GpsLog.create({ tripId: started._id, vehicleId: started.vehicleId, driverId: driver._id, ...location });
   }
-  await notifyTripParticipants(started, "Trip started", `Trip ${started.tripId} has started with a verified QR code and recorded odometer reading.`);
+  await notifyTripParticipants(started, "Trip started", `Trip ${started.tripId} has started with a verified OTP and recorded odometer reading.`);
   emit(`trip-room-${started._id}`, "trip:started", started);
   emit("admin-room", "trip:started", started);
   return started;
@@ -472,28 +471,33 @@ export async function requestTripCompletion({ tripId, actor, endKM, location }) 
   trip.endKM = endKM;
   trip.distance = distance;
   trip.completionRequestedAt = new Date();
-  trip.completionQrToken = makeQrToken(`${trip.tripId}-completion`);
+  trip.completionQrToken = makeTripOtp();
   trip.completionQrExpiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
   trip.completionQrConsumed = false;
   trip.endLocation = location ? { ...location, recordedAt: new Date() } : undefined;
   trip.status = "TRIP_COMPLETION_PENDING";
   await trip.save();
-  await notifyTripParticipants(trip, "Trip ready for confirmation", `Trip ${trip.tripId} needs the faculty member to scan the completion QR code and submit a rating.`);
+  await notifyTripParticipants(trip, "Trip ready for confirmation", `Trip ${trip.tripId} needs the faculty member to enter the completion OTP and submit a rating.`);
   emit(`trip-room-${trip._id}`, "trip:completion-pending", trip);
   emit("admin-room", "trip:completion-pending", trip);
   return trip;
 }
 
-export async function generateCompletionQr(tripId, actor) {
+export async function generateCompletionOtp(tripId, actor) {
   const driver = await Driver.findOne({ userId: actor._id });
   const trip = await Trip.findById(tripId).select("+completionQrToken");
   if (!driver || !trip || String(trip.driverId) !== String(driver._id)) {
     const error = new Error("Driver is not authorized for this trip."); error.status = 403; throw error;
   }
   if (trip.status !== "TRIP_COMPLETION_PENDING" || !trip.completionQrToken || trip.completionQrExpiresAt < new Date()) {
-    const error = new Error("A valid ending odometer reading is required before generating the completion QR code."); error.status = 409; throw error;
+    const error = new Error("A valid ending odometer reading is required before generating the completion OTP."); error.status = 409; throw error;
   }
-  return QRCode.toDataURL(trip.completionQrToken);
+  if (!/^\d{6}$/.test(trip.completionQrToken)) {
+    trip.completionQrToken = makeTripOtp();
+    trip.completionQrConsumed = false;
+    await trip.save();
+  }
+  return trip.completionQrToken;
 }
 
 export async function completeTrip({ tripId, actor, qrToken, rating, feedback }) {
@@ -509,7 +513,7 @@ export async function completeTrip({ tripId, actor, qrToken, rating, feedback })
     const error = new Error("This trip is not awaiting faculty confirmation."); error.status = 409; throw error;
   }
   if (trip.completionQrToken !== qrToken || trip.completionQrConsumed || trip.completionQrExpiresAt < new Date()) {
-    const error = new Error("The completion QR code is invalid, expired, or already used."); error.status = 400; throw error;
+    const error = new Error("The completion OTP is invalid, expired, or already used."); error.status = 400; throw error;
   }
   trip.facultyRating = rating;
   trip.facultyFeedback = feedback;

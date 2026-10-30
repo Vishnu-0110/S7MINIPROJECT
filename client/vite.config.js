@@ -9,8 +9,7 @@ export default defineConfig({
         manualChunks: {
           react: ["react", "react-dom", "react-router-dom"],
           charts: ["recharts"],
-          realtime: ["socket.io-client"],
-          qr: ["html5-qrcode"]
+          realtime: ["socket.io-client"]
         }
       }
     }

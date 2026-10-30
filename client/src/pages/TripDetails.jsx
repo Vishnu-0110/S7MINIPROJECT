@@ -1,6 +1,5 @@
-import { Html5Qrcode } from "html5-qrcode";
-import { AlertTriangle, Camera, Navigation, QrCode, Star, Wrench } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, KeyRound, Navigation, Star, Wrench } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import LoadingState from "../components/LoadingState.jsx";
 import { api } from "../lib/api.js";
@@ -12,14 +11,9 @@ export default function TripDetails() {
   const { id } = useParams();
   const user = useAuthStore((state) => state.user);
   const [trip, setTrip] = useState(null);
-  const [qr, setQr] = useState("");
-  const [completionQr, setCompletionQr] = useState("");
-  const [completionToken, setCompletionToken] = useState("");
-  const [completionScanOpen, setCompletionScanOpen] = useState(false);
+  const [tripOtp, setTripOtp] = useState("");
+  const [completionOtp, setCompletionOtp] = useState("");
   const [completionBusy, setCompletionBusy] = useState(false);
-  const [driverCameraState, setDriverCameraState] = useState("idle");
-  const [completionCameraState, setCompletionCameraState] = useState("idle");
-  const [token, setToken] = useState("");
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ startKM: "", endKM: "", rating: "", feedback: "" });
   const [loading, setLoading] = useState(true);
@@ -27,25 +21,22 @@ export default function TripDetails() {
   const [incidentPanelOpen, setIncidentPanelOpen] = useState(false);
   const [incidentKind, setIncidentKind] = useState("ACCIDENT");
   const [incidentDetails, setIncidentDetails] = useState("");
-  const [startStep, setStartStep] = useState("kilometre");
-  const scannerRef = useRef(null);
-  const completionScannerRef = useRef(null);
 
   async function load() {
     try {
       const tripResult = await api.get(`/trips/${id}`);
       setTrip(tripResult.data);
       if (user.role === "DRIVER" && tripResult.data.status === "TRIP_COMPLETION_PENDING") {
-        const result = await api.get(`/trips/${id}/completion-qr`);
-        setCompletionQr(result.data?.qr || "");
-        setQr("");
+        const result = await api.get(`/trips/${id}/completion-otp`);
+        setCompletionOtp(result.data?.otp || "");
+        setTripOtp("");
       } else if (user.role !== "DRIVER" && ["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(tripResult.data.status)) {
-        const result = await api.get(`/trips/${id}/qr`);
-        setQr(result.data?.qr || "");
-        setCompletionQr("");
+        const result = await api.get(`/trips/${id}/otp`);
+        setTripOtp(result.data?.otp || "");
+        setCompletionOtp("");
       } else {
-        setQr("");
-        setCompletionQr("");
+        setTripOtp("");
+        setCompletionOtp("");
       }
     } catch (error) {
       setMessage(error.message);
@@ -63,19 +54,15 @@ export default function TripDetails() {
     const joinTrip = () => socket.emit("trip:join", id);
     const onReallocated = (event) => {
       if (String(event?.tripId) !== String(id)) return;
-      setQr("");
-      setCompletionQr("");
-      setCompletionToken("");
-      setStartStep("kilometre");
-      setMessage("A replacement vehicle and driver have been assigned. The previous assignment has been removed; a refreshed QR code is ready.");
+      setTripOtp("");
+      setCompletionOtp("");
+      setMessage("A replacement vehicle and driver have been assigned. The faculty member has a refreshed six-digit OTP for the new driver.");
       load();
     };
     const onCancelled = (event) => {
       if (String(event?.tripId) !== String(id)) return;
-      setQr("");
-      setCompletionQr("");
-      setCompletionToken("");
-      setCompletionScanOpen(false);
+      setTripOtp("");
+      setCompletionOtp("");
       setMessage(event?.reason || "This trip assignment was cancelled by Transport Administration.");
       load();
     };
@@ -91,42 +78,14 @@ export default function TripDetails() {
     };
   }, [id, user.role]);
 
-  useEffect(() => {
-    // Replacement drivers do not re-enter the original odometer reading. Their
-    // scanner is visible immediately, so initialise it even though startStep
-    // remains "kilometre" from the original trip flow.
-    const canScan = ["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip?.status);
-    const shouldOpenScanner = trip?.status !== "SCHEDULED" || startStep === "scan";
-    if (user.role !== "DRIVER" || !canScan || !shouldOpenScanner) return undefined;
-    const scanner = new Html5Qrcode("qr-reader");
-    scannerRef.current = scanner;
-    setDriverCameraState("idle");
-    return () => {
-      stopQrScanner(scanner);
-      if (scannerRef.current === scanner) scannerRef.current = null;
-    };
-  }, [startStep, user.role, trip?.status]);
-
-  useEffect(() => {
-    if (user.role !== "FACULTY_STAFF" || !completionScanOpen || trip?.status !== "TRIP_COMPLETION_PENDING") return undefined;
-    const scanner = new Html5Qrcode("completion-qr-reader");
-    completionScannerRef.current = scanner;
-    setCompletionCameraState("idle");
-    return () => {
-      stopQrScanner(scanner);
-      if (completionScannerRef.current === scanner) completionScannerRef.current = null;
-    };
-  }, [completionScanOpen, trip?.status, user.role]);
-
-  async function verify(scannedToken) {
+  async function verify(otp) {
     if (!scannedToken) {
-      setMessage("Scan the trip QR code before starting.");
+      setMessage("Enter the six-digit OTP shown in the faculty portal.");
       return false;
     }
     try {
-      await api.post(`/trips/${id}/qr/verify`, { qrToken: scannedToken });
-      setToken(scannedToken);
-      setMessage(trip.status === "SCHEDULED" ? "QR verified. Enter the starting kilometre reading, then start the trip." : "Replacement verified. The trip has resumed.");
+      await api.post(`/trips/${id}/otp/verify`, { otp });
+      setMessage(trip.status === "SCHEDULED" ? "OTP verified. Enter the starting kilometre reading, then start the trip." : "Replacement OTP verified. The trip has resumed.");
       await load();
       return true;
     } catch (error) {
@@ -135,7 +94,7 @@ export default function TripDetails() {
     }
   }
 
-  async function startTrip(scannedToken) {
+  async function startTrip(otp) {
     const startKM = Number(form.startKM);
     if (!form.startKM || !Number.isFinite(startKM) || startKM < 0) {
       setMessage("Enter a valid starting kilometre reading before starting the trip.");
@@ -144,7 +103,7 @@ export default function TripDetails() {
     try {
       await api.post(`/trips/${id}/start`, {
         startKM,
-        qrToken: scannedToken,
+        otp,
         location: await currentLocation()
       });
       setMessage("Trip started. You can now share GPS updates.");
@@ -154,61 +113,15 @@ export default function TripDetails() {
     }
   }
 
-  function continueToQrScan() {
+  async function submitStartOtp() {
     const startKM = Number(form.startKM);
     if (!form.startKM || !Number.isFinite(startKM) || startKM < 0) {
-      setMessage("Enter a valid starting kilometre reading before continuing to QR scanning.");
+      setMessage("Enter a valid starting kilometre reading before verifying the OTP.");
       return;
     }
-    setMessage("Step 2 of 2: Scan the faculty QR code to verify and start the trip.");
-    setStartStep("scan");
-  }
-
-  async function handleScannedToken(scannedToken) {
-    const verified = await verify(scannedToken);
-    if (verified && trip.status === "SCHEDULED") await startTrip(scannedToken);
-  }
-
-  async function startDriverCamera() {
-    const scanner = scannerRef.current;
-    if (!scanner || driverCameraState === "starting" || driverCameraState === "scanning") return;
-    setDriverCameraState("starting");
-    let handled = false;
-    try {
-      await startCameraScanner(scanner, async (decoded) => {
-        if (handled) return;
-        handled = true;
-        setDriverCameraState("idle");
-        await stopQrScanner(scanner);
-        await handleScannedToken(decoded);
-      });
-      setDriverCameraState("scanning");
-    } catch (error) {
-      setDriverCameraState("error");
-      setMessage(cameraErrorMessage(error));
-    }
-  }
-
-  async function startCompletionCamera() {
-    const scanner = completionScannerRef.current;
-    if (!scanner || completionCameraState === "starting" || completionCameraState === "scanning") return;
-    setCompletionCameraState("starting");
-    let handled = false;
-    try {
-      await startCameraScanner(scanner, async (decoded) => {
-        if (handled) return;
-        handled = true;
-        setCompletionCameraState("idle");
-        await stopQrScanner(scanner);
-        setCompletionToken(decoded);
-        setMessage("Completion QR scanned. Select a rating, then confirm completion.");
-        setCompletionScanOpen(false);
-      });
-      setCompletionCameraState("scanning");
-    } catch (error) {
-      setCompletionCameraState("error");
-      setMessage(cameraErrorMessage(error));
-    }
+    const otp = form.startOtp?.trim();
+    const verified = await verify(otp);
+    if (verified && trip.status === "SCHEDULED") await startTrip(otp);
   }
 
   async function end() {
@@ -217,7 +130,7 @@ export default function TripDetails() {
         endKM: Number(form.endKM),
         location: await currentLocation()
       });
-      setMessage("Ending odometer saved. Show the generated completion QR code to the faculty member for scanning and rating.");
+      setMessage("Ending odometer saved. The driver now has a six-digit completion OTP for the faculty member.");
       await load();
     } catch (error) {
       setMessage(error.message);
@@ -225,15 +138,14 @@ export default function TripDetails() {
   }
 
   async function confirmCompletion() {
-    if (!completionToken) return setMessage("Scan the driver’s completion QR code before confirming the trip.");
+    if (!form.completionOtp?.trim()) return setMessage("Enter the six-digit completion OTP shown by the driver.");
     if (!form.rating) return setMessage("Select a star rating before confirming the trip.");
     if (completionBusy) return;
     setCompletionBusy(true);
     try {
-      await api.post(`/trips/${id}/complete`, { qrToken: completionToken, rating: Number(form.rating), feedback: form.feedback || undefined });
+      await api.post(`/trips/${id}/complete`, { otp: form.completionOtp.trim(), rating: Number(form.rating), feedback: form.feedback || undefined });
       setMessage("Thank you. The trip is completed and your rating has been recorded.");
-      setCompletionToken("");
-      setCompletionScanOpen(false);
+      setForm((current) => ({ ...current, completionOtp: "" }));
       await load();
     } catch (error) {
       setMessage(error.message);
@@ -326,7 +238,7 @@ export default function TripDetails() {
         {message ? <div className="alert mt-4">{message}</div> : null}
         {trip.replacementStatus === "VERIFICATION_PENDING" ? (
           <div className="alert mt-4 border border-teal-200 bg-teal-50 text-teal-950">
-            <span className="font-semibold">Replacement assigned.</span> The vehicle and driver shown above are the current assignment. Show the refreshed QR code to the new driver so the trip can safely resume.
+            <span className="font-semibold">Replacement assigned.</span> The vehicle and driver shown above are the current assignment. Give the refreshed OTP to the new driver so the trip can safely resume.
           </div>
         ) : trip.replacementStatus && trip.replacementStatus !== "NONE" ? (
           <div className="alert alert-warning mt-4">Replacement status: {trip.replacementStatus.replaceAll("_", " ")}</div>
@@ -335,24 +247,19 @@ export default function TripDetails() {
       <aside className="space-y-4">
         <div className="rounded-lg border border-slate-200 bg-white p-5">
           <div className="flex items-center gap-2">
-            <QrCode className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold">QR Trip Verification</h3>
+            <KeyRound className="h-5 w-5 text-primary" />
+            <h3 className="font-semibold">Trip OTP verification</h3>
           </div>
-          {qr ? <img className="mx-auto mt-4 h-56 w-56" src={qr} alt="Trip QR code" /> : null}
-          {completionQr ? <>
-            <p className="mt-3 text-sm text-slate-600">Show this completion QR code to the requesting faculty member. The trip ends only after they scan it and give a rating.</p>
-            <img className="mx-auto mt-4 h-56 w-56" src={completionQr} alt="Trip completion QR code" />
+          {tripOtp ? <>
+            <p className="mt-3 text-sm text-slate-600">Give this one-time password to the assigned driver. It is valid only for this trip and is consumed after use.</p>
+            <p className="mt-4 rounded-xl bg-primary/10 px-4 py-5 text-center font-mono text-4xl font-bold tracking-[0.35em] text-primary">{tripOtp}</p>
           </> : null}
+          {completionOtp ? <><p className="mt-3 text-sm text-slate-600">Give this completion OTP to the requesting faculty member. The trip ends only after they enter it and provide a rating.</p><p className="mt-4 rounded-xl bg-primary/10 px-4 py-5 text-center font-mono text-4xl font-bold tracking-[0.35em] text-primary">{completionOtp}</p></> : null}
           {user.role === "DRIVER" && ["SCHEDULED", "TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip.status) ? (
             <div className="mt-4 space-y-3">
-              {trip.status === "SCHEDULED" && startStep === "kilometre" ? <p className="text-sm text-slate-600">Complete Step 1 by entering the starting kilometre reading. QR scanning becomes available in Step 2.</p> : <>
-                <div className="rounded-xl bg-primary/5 p-3 text-sm font-medium text-primary">Step 2 of 2: Scan the faculty QR code. A successful scan verifies the trip and starts it automatically.</div>
-                <div className="flex items-center gap-2 text-sm font-medium text-primary"><Camera className="h-4 w-4" /> Camera scan</div>
-                <div id="qr-reader" className="qr-camera-reader" aria-label="Camera QR code scanner" />
-                {driverCameraState !== "scanning" ? <button className="btn btn-primary w-full" onClick={startDriverCamera} disabled={driverCameraState === "starting"}><Camera className="h-4 w-4" /> {driverCameraState === "starting" ? "Starting camera…" : driverCameraState === "error" ? "Retry camera scanner" : "Start camera scanner"}</button> : null}
-                <p className="text-xs text-slate-500">Tap Start camera scanner, allow access if prompted, then hold the faculty QR code inside the frame. Image uploads are not used for trip verification.</p>
-                <button className="btn btn-ghost btn-sm w-full" onClick={() => { stopQrScanner(scannerRef.current); setDriverCameraState("idle"); setStartStep("kilometre"); }}>Cancel camera scan</button>
-              </>}
+              <div className="rounded-xl bg-primary/5 p-3 text-sm font-medium text-primary">Enter the six-digit OTP shown in the faculty portal. For a replacement trip, enter the refreshed OTP.</div>
+              <input className="input input-bordered w-full text-center font-mono text-2xl tracking-[0.3em]" inputMode="numeric" maxLength="6" value={form.startOtp || ""} onChange={(event) => setForm((current) => ({ ...current, startOtp: event.target.value.replace(/\D/g, "").slice(0, 6) }))} placeholder="000000" aria-label="Trip OTP" />
+              {trip.status !== "SCHEDULED" ? <button className="btn btn-primary w-full" onClick={() => verify(form.startOtp?.trim())}><KeyRound className="h-4 w-4" /> Verify replacement OTP</button> : null}
             </div>
           ) : null}
         </div>
@@ -362,9 +269,9 @@ export default function TripDetails() {
               {trip.status === "SCHEDULED" ? <>
                 <div className="rounded-xl border border-slate-200 p-3">
                   <p className="text-sm font-semibold text-slate-800">Step 1 of 2: Starting kilometre</p>
-                  <p className="mt-1 text-xs text-slate-500">Enter the vehicle odometer reading before QR scanning.</p>
-                  <input className="input input-bordered mt-3 w-full" min="0" type="number" value={form.startKM} onChange={(event) => setForm((current) => ({ ...current, startKM: event.target.value }))} placeholder="Starting odometer (KM)" disabled={startStep === "scan"} />
-                  {startStep === "kilometre" ? <button className="btn btn-primary mt-3 w-full" onClick={continueToQrScan}>Continue to QR scan</button> : <p className="mt-3 text-xs font-medium text-success">Kilometre reading saved. Complete QR scanning to start the trip.</p>}
+                  <p className="mt-1 text-xs text-slate-500">Enter the vehicle odometer and the six-digit OTP shown by faculty.</p>
+                  <input className="input input-bordered mt-3 w-full" min="0" type="number" value={form.startKM} onChange={(event) => setForm((current) => ({ ...current, startKM: event.target.value }))} placeholder="Starting odometer (KM)" />
+                  <button className="btn btn-primary mt-3 w-full" onClick={submitStartOtp}><KeyRound className="h-4 w-4" /> Verify OTP and start trip</button>
                 </div>
               </> : null}
               {["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status) ? <button className="btn btn-error w-full" onClick={() => reportIncident("breakdown")} disabled={incidentBusy}><Wrench className="h-4 w-4" /> Report breakdown</button> : null}
@@ -373,7 +280,7 @@ export default function TripDetails() {
                 <input className="input input-bordered w-full" min={trip.startKM || 0} type="number" value={form.endKM} onChange={(event) => setForm((current) => ({ ...current, endKM: event.target.value }))} placeholder="Ending odometer (KM)" />
                 <button className="btn btn-error w-full" onClick={end} disabled={!form.endKM}>Continue to faculty confirmation</button>
               </> : null}
-              {trip.status === "TRIP_COMPLETION_PENDING" ? <p className="text-sm text-slate-500">The ending odometer is recorded. Keep the completion QR code open until the faculty member scans it and provides a rating.</p> : null}
+              {trip.status === "TRIP_COMPLETION_PENDING" ? <p className="text-sm text-slate-500">The ending odometer is recorded. Show the completion OTP to the faculty member so they can provide a rating.</p> : null}
               {!["SCHEDULED", "TRIP_STARTED", "TRIP_COMPLETION_PENDING"].includes(trip.status) ? <p className="text-sm text-slate-500">This trip is {trip.status.replaceAll("_", " ").toLowerCase()}.</p> : null}
             </div>
           </div>
@@ -382,9 +289,8 @@ export default function TripDetails() {
             <Navigation className="mb-2 h-5 w-5 text-primary" />
             <p className="text-sm text-slate-600">Live GPS updates appear in the tracking screen when the driver starts sending location records.</p>
             {user.role === "FACULTY_STAFF" && trip.status === "TRIP_COMPLETION_PENDING" ? <div className="mt-4 space-y-3">
-              <div className="rounded-xl bg-primary/5 p-3 text-sm text-primary">Scan the driver’s completion QR code and submit your rating to end this trip.</div>
-              {completionScanOpen ? <><div id="completion-qr-reader" className="qr-camera-reader" aria-label="Completion QR code scanner" />{completionCameraState !== "scanning" ? <button className="btn btn-primary w-full" onClick={startCompletionCamera} disabled={completionCameraState === "starting"}><Camera className="h-4 w-4" /> {completionCameraState === "starting" ? "Starting camera…" : completionCameraState === "error" ? "Retry camera scanner" : "Start camera scanner"}</button> : null}<p className="text-xs text-slate-500">Tap Start camera scanner, allow access if prompted, then hold the driver’s QR code inside the frame.</p><button className="btn btn-ghost btn-sm w-full" onClick={() => { stopQrScanner(completionScannerRef.current); setCompletionCameraState("idle"); setCompletionScanOpen(false); }}>Cancel camera scan</button></> : <button className="btn btn-primary w-full" onClick={() => setCompletionScanOpen(true)}><Camera className="h-4 w-4" /> Scan completion QR</button>}
-              {completionToken ? <p className="text-sm font-medium text-success">Completion QR scanned successfully.</p> : null}
+              <div className="rounded-xl bg-primary/5 p-3 text-sm text-primary">Enter the six-digit completion OTP shown in the driver portal, then submit your rating to end this trip.</div>
+              <input className="input input-bordered w-full text-center font-mono text-2xl tracking-[0.3em]" inputMode="numeric" maxLength="6" value={form.completionOtp || ""} onChange={(event) => setForm((current) => ({ ...current, completionOtp: event.target.value.replace(/\D/g, "").slice(0, 6) }))} placeholder="000000" aria-label="Completion OTP" />
               <label className="form-control"><span className="label-text">Star rating</span><select className="select select-bordered" value={form.rating} onChange={(event) => setForm((current) => ({ ...current, rating: event.target.value }))}><option value="">Select rating</option>{[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} star{rating > 1 ? "s" : ""}</option>)}</select></label>
               <label className="form-control"><span className="label-text">Feedback (optional)</span><textarea className="textarea textarea-bordered" value={form.feedback} onChange={(event) => setForm((current) => ({ ...current, feedback: event.target.value }))} placeholder="Share feedback about this trip" /></label>
               <button className="btn btn-success w-full" onClick={confirmCompletion} disabled={completionBusy}><Star className="h-4 w-4" /> {completionBusy ? "Completing trip…" : "Confirm trip and rating"}</button>
@@ -395,40 +301,6 @@ export default function TripDetails() {
       </aside>
     </section>
   );
-}
-
-async function startCameraScanner(scanner, onScan) {
-  const config = { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1 };
-  try {
-    await scanner.start({ facingMode: { ideal: "environment" } }, config, onScan, () => undefined);
-  } catch (primaryError) {
-    const cameras = await Html5Qrcode.getCameras().catch(() => []);
-    const fallback = cameras.find((camera) => /back|rear|environment/i.test(camera.label)) || cameras[0];
-    if (!fallback) throw primaryError;
-    await scanner.start(fallback.id, config, onScan, () => undefined);
-  }
-}
-
-async function stopQrScanner(scanner) {
-  if (!scanner) return;
-  try {
-    if (scanner.isScanning) await scanner.stop();
-  } catch {
-    // Stopping an already stopped camera is safe.
-  }
-  try {
-    await scanner.clear();
-  } catch {
-    // The scanner target may already be removed during React cleanup.
-  }
-}
-
-function cameraErrorMessage(error) {
-  const detail = String(error?.message || error || "").toLowerCase();
-  if (detail.includes("permission") || detail.includes("notallowed")) return "Camera permission is required. Allow camera access in the browser settings, then tap Retry camera scanner.";
-  if (detail.includes("notfound") || detail.includes("no camera")) return "No camera was found. Enable a camera on this device, then retry.";
-  if (detail.includes("notreadable") || detail.includes("track start")) return "The camera is currently busy. Close other camera apps and retry.";
-  return "The camera could not be started. Close other apps using the camera and tap Retry camera scanner.";
 }
 
 function currentLocation() {

@@ -14,16 +14,18 @@ export const assignSchema = z.object({
   })
 });
 
-export const qrVerifySchema = z.object({
+const otp = z.string().regex(/^\d{6}$/, "Enter the six-digit OTP.");
+
+export const otpVerifySchema = z.object({
   body: z.object({
-    qrToken: z.string().min(8)
+    otp
   })
 });
 
 export const startTripSchema = z.object({
   body: z.object({
     startKM: z.coerce.number().finite().nonnegative(),
-    qrToken: z.string().min(8, "Scan and verify the trip QR code before starting."),
+    otp,
     location: z.object({ latitude: z.number(), longitude: z.number(), accuracy: z.number().optional() }).optional()
   })
 });
@@ -37,7 +39,7 @@ export const endTripSchema = z.object({
 
 export const tripCompletionSchema = z.object({
   body: z.object({
-    qrToken: z.string().min(8),
+    otp,
     rating: z.coerce.number().int().min(1).max(5),
     feedback: z.string().trim().max(1000).optional()
   })

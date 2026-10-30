@@ -362,5 +362,5 @@ export async function smartAllocateBreakdown(req, res) {
   await alert.save();
   req.app.get("io")?.to("admin-room").emit("emergency:updated", alert);
   req.app.get("io")?.to(`coordinator-room-${trip.departmentId}`).emit("emergency:updated", alert);
-  return ok(res, "Replacement vehicle and driver assigned. The faculty QR code has been refreshed for verification.", { alert, trip: replacement, allocation: alternatives[0] });
+  return ok(res, "Replacement vehicle and driver assigned. A refreshed faculty OTP is ready for verification.", { alert, trip: replacement, allocation: alternatives[0] });
 }

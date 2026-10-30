@@ -119,7 +119,7 @@ function DriverShortcut() {
     <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-primary p-7 text-white shadow-xl shadow-slate-950/15 sm:p-10">
       <div className="absolute -right-12 -top-12 h-52 w-52 rounded-full bg-teal-300/20 blur-2xl" />
       <div className="relative max-w-xl"><p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-200">Driver workspace</p><h2 className="mt-3 text-2xl font-bold">Your trips, in one place.</h2>
-      <p className="mt-3 text-sm leading-6 text-slate-300">Start and complete assigned trips, verify QR codes, share GPS updates, log fuel, and raise an emergency alert.</p>
+      <p className="mt-3 text-sm leading-6 text-slate-300">Start and complete assigned trips, verify one-time passwords, share GPS updates, log fuel, and raise an emergency alert.</p>
       <Link className="btn btn-primary mt-6 rounded-xl border-0 bg-white text-slate-900 hover:bg-teal-50" to="/driver">Open driver dashboard</Link></div>
     </div>
   );

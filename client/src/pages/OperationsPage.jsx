@@ -163,7 +163,7 @@ export default function OperationsPage({ resource }) {
   async function smartAllocateBreakdown(id) {
     try {
       await api.post(`/emergencies/${id}/smart-allocate`);
-      setMessage("Replacement assignment completed. The faculty member can show the refreshed QR code to the new driver.");
+      setMessage("Replacement assignment completed. The faculty member can give the refreshed OTP to the new driver.");
       await reload();
     } catch (err) {
       setMessage(err.message);
