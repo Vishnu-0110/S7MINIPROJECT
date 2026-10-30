@@ -1,5 +1,5 @@
-import { ArrowLeft, LocateFixed, MapPin, Navigation, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowLeft, LocateFixed, MapPin, Minus, Navigation, Plus, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import LoadingState from "../components/LoadingState.jsx";
 import { api } from "../lib/api.js";
@@ -19,7 +19,7 @@ export default function NavigationPage() {
     setRefreshing(true);
     setError("");
     try {
-      const currentTrip = trip || (await api.get(`/trips/${id}`)).data;
+      const currentTrip = (await api.get(`/trips/${id}`)).data;
       setTrip(currentTrip);
       const current = await currentLocation();
       const start = current || currentTrip.startLocation;
@@ -36,20 +36,14 @@ export default function NavigationPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [id, trip]);
+  }, [id]);
 
   useEffect(() => { loadRoute(); }, [loadRoute]);
 
-  const routePoints = useMemo(() => {
-    const coordinates = route?.geometry?.coordinates || [];
-    if (!coordinates.length) return [];
-    const longitudes = coordinates.map(([longitude]) => longitude);
-    const latitudes = coordinates.map(([, latitude]) => latitude);
-    const minLon = Math.min(...longitudes); const maxLon = Math.max(...longitudes);
-    const minLat = Math.min(...latitudes); const maxLat = Math.max(...latitudes);
-    const lonSpan = Math.max(maxLon - minLon, 0.0001); const latSpan = Math.max(maxLat - minLat, 0.0001);
-    return coordinates.map(([longitude, latitude]) => ({ x: 55 + ((longitude - minLon) / lonSpan) * 890, y: 545 - ((latitude - minLat) / latSpan) * 490 }));
-  }, [route]);
+  useEffect(() => {
+    const timer = window.setInterval(loadRoute, 30000);
+    return () => window.clearInterval(timer);
+  }, [loadRoute]);
 
   if (loading) return <LoadingState />;
 
@@ -72,18 +66,7 @@ export default function NavigationPage() {
           <div className="stat rounded-xl border border-slate-200 bg-white shadow-sm"><div className="stat-title">Destination</div><div className="stat-value truncate text-lg">{trip.destination}</div></div>
         </div>
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="overflow-hidden rounded-2xl border border-slate-300 bg-[#e8f0e8] shadow-sm">
-            <div className="relative aspect-[16/9] min-h-[22rem]">
-              <div className="absolute inset-0 opacity-40" style={{ backgroundImage: "linear-gradient(30deg, #cbdcca 12%, transparent 12.5%, transparent 87%, #cbdcca 87.5%), linear-gradient(150deg, #cbdcca 12%, transparent 12.5%, transparent 87%, #cbdcca 87.5%)", backgroundSize: "80px 140px" }} />
-              <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1000 600" preserveAspectRatio="none" aria-label="Driving route map">
-                <polyline points={routePoints.map(({ x, y }) => `${x},${y}`).join(" ")} fill="none" stroke="#fff" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round" />
-                <polyline points={routePoints.map(({ x, y }) => `${x},${y}`).join(" ")} fill="none" stroke="#2563eb" strokeWidth="11" strokeLinecap="round" strokeLinejoin="round" />
-                {routePoints.length ? <><circle cx={routePoints[0].x} cy={routePoints[0].y} r="18" fill="#0f766e" stroke="#fff" strokeWidth="7" /><circle cx={routePoints[routePoints.length - 1].x} cy={routePoints[routePoints.length - 1].y} r="18" fill="#dc2626" stroke="#fff" strokeWidth="7" /></> : null}
-              </svg>
-              <div className="absolute left-3 top-3 rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold shadow"><LocateFixed className="mr-1 inline h-4 w-4 text-teal-700" /> Your location</div>
-              <div className="absolute right-3 top-3 rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold shadow"><MapPin className="mr-1 inline h-4 w-4 text-red-600" /> {trip.destination}</div>
-            </div>
-          </div>
+          <RouteMap route={route} destinationName={trip.destination} />
           <div className="app-surface p-4">
             <div className="flex items-center gap-2"><Navigation className="h-5 w-5 text-primary" /><h3 className="font-semibold">Driving directions</h3></div>
             <p className="mt-1 text-xs text-slate-500">Follow the route shown below. Refresh to recalculate from your latest position.</p>
@@ -95,6 +78,81 @@ export default function NavigationPage() {
       </> : <div className="app-surface p-6 text-sm text-slate-600">No route is available yet. Allow GPS access and refresh the route.</div>}
     </section>
   );
+}
+
+function RouteMap({ route, destinationName }) {
+  const mapRef = useRef(null);
+  const [viewport, setViewport] = useState({ width: 1000, height: 560 });
+  const [view, setView] = useState(() => fitView(route.geometry.coordinates, 1000, 560));
+  const coordinates = route.geometry.coordinates;
+
+  useEffect(() => {
+    if (!mapRef.current) return undefined;
+    const resize = () => setViewport({ width: mapRef.current.clientWidth || 1000, height: mapRef.current.clientHeight || 560 });
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(mapRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => { setView(fitView(coordinates, viewport.width, viewport.height)); }, [route, viewport.width, viewport.height]);
+
+  const origin = project(view.center[0], view.center[1], view.zoom);
+  const topLeft = { x: origin.x - viewport.width / 2, y: origin.y - viewport.height / 2 };
+  const routePixels = coordinates.map(([longitude, latitude]) => {
+    const point = project(longitude, latitude, view.zoom);
+    return `${point.x - topLeft.x},${point.y - topLeft.y}`;
+  }).join(" ");
+  const start = routePixels.split(" ")[0]?.split(",") || [];
+  const end = routePixels.split(" ").at(-1)?.split(",") || [];
+  const tiles = [];
+  const firstX = Math.floor(topLeft.x / 256) - 1;
+  const firstY = Math.floor(topLeft.y / 256) - 1;
+  const lastX = Math.ceil((topLeft.x + viewport.width) / 256) + 1;
+  const lastY = Math.ceil((topLeft.y + viewport.height) / 256) + 1;
+  for (let x = firstX; x <= lastX; x += 1) for (let y = firstY; y <= lastY; y += 1) tiles.push({ x, y, key: `${x}-${y}` });
+  const maxTile = 2 ** view.zoom;
+  const clampTile = (value) => ((value % maxTile) + maxTile) % maxTile;
+
+  return (
+    <div className="relative h-[28rem] overflow-hidden rounded-2xl border border-slate-300 bg-slate-200 shadow-sm" ref={mapRef}>
+      {tiles.map((tile) => <img key={tile.key} className="absolute h-64 w-64 max-w-none" style={{ left: tile.x * 256 - topLeft.x, top: tile.y * 256 - topLeft.y }} src={`https://tile.openstreetmap.org/${view.zoom}/${clampTile(tile.x)}/${clampTile(tile.y)}.png`} alt="" draggable="false" />)}
+      <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-label="Driving route map">
+        <polyline points={routePixels} fill="none" stroke="#fff" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round" />
+        <polyline points={routePixels} fill="none" stroke="#2563eb" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
+        {start.length === 2 ? <circle cx={start[0]} cy={start[1]} r="12" fill="#0f766e" stroke="#fff" strokeWidth="5" /> : null}
+        {end.length === 2 ? <circle cx={end[0]} cy={end[1]} r="12" fill="#dc2626" stroke="#fff" strokeWidth="5" /> : null}
+      </svg>
+      <div className="absolute left-3 top-3 rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold shadow"><LocateFixed className="mr-1 inline h-4 w-4 text-teal-700" /> Your location</div>
+      <div className="absolute right-3 top-3 rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold shadow"><MapPin className="mr-1 inline h-4 w-4 text-red-600" /> {destinationName}</div>
+      <div className="absolute bottom-3 right-3 flex flex-col overflow-hidden rounded-lg bg-white shadow">
+        <button className="btn btn-square btn-sm rounded-none" onClick={() => setView((current) => ({ ...current, zoom: Math.min(18, current.zoom + 1) }))} aria-label="Zoom in"><Plus className="h-4 w-4" /></button>
+        <button className="btn btn-square btn-sm rounded-none" onClick={() => setView((current) => ({ ...current, zoom: Math.max(4, current.zoom - 1) }))} aria-label="Zoom out"><Minus className="h-4 w-4" /></button>
+        <button className="btn btn-square btn-sm rounded-none border-t" onClick={() => setView(fitView(coordinates, viewport.width, viewport.height))} aria-label="Fit route"><LocateFixed className="h-4 w-4" /></button>
+      </div>
+      <p className="absolute bottom-1 left-2 text-[10px] text-slate-700 drop-shadow">© OpenStreetMap contributors</p>
+    </div>
+  );
+}
+
+function project(longitude, latitude, zoom) {
+  const scale = 256 * (2 ** zoom);
+  const safeLatitude = Math.max(-85.0511, Math.min(85.0511, latitude));
+  const radians = safeLatitude * Math.PI / 180;
+  return { x: ((longitude + 180) / 360) * scale, y: (1 - Math.log(Math.tan(radians) + (1 / Math.cos(radians))) / Math.PI) / 2 * scale };
+}
+
+function fitView(coordinates, width, height) {
+  const longitudes = coordinates.map(([longitude]) => longitude);
+  const latitudes = coordinates.map(([, latitude]) => latitude);
+  const center = [(Math.min(...longitudes) + Math.max(...longitudes)) / 2, (Math.min(...latitudes) + Math.max(...latitudes)) / 2];
+  let zoom = 18;
+  while (zoom > 4) {
+    const projected = coordinates.map(([longitude, latitude]) => project(longitude, latitude, zoom));
+    if (Math.max(...projected.map((point) => point.x)) - Math.min(...projected.map((point) => point.x)) < width * 0.78 && Math.max(...projected.map((point) => point.y)) - Math.min(...projected.map((point) => point.y)) < height * 0.78) break;
+    zoom -= 1;
+  }
+  return { center, zoom };
 }
 
 async function geocode(destination) {
