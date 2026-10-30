@@ -8,6 +8,7 @@ import DriverDashboard from "./pages/DriverDashboard.jsx";
 import DriverLeaves from "./pages/DriverLeaves.jsx";
 import LiveTracking from "./pages/LiveTracking.jsx";
 import Login from "./pages/Login.jsx";
+import NavigationPage from "./pages/NavigationPage.jsx";
 import ManagementPage from "./pages/ManagementPage.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import OperationsPage from "./pages/OperationsPage.jsx";
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="approvals" element={<Navigate to="/requests" replace />} />
         <Route path="trips" element={<Trips />} />
         <Route path="trips/:id" element={<TripDetails />} />
+        <Route path="trips/:id/navigation" element={<Shell roles={["DRIVER"]}><NavigationPage /></Shell>} />
         <Route path="tracking" element={<Shell roles={["FACULTY_STAFF", "DEPARTMENT_COORDINATOR", "TRANSPORT_ADMIN"]}><LiveTracking /></Shell>} />
         <Route path="vehicles" element={<Shell roles={["TRANSPORT_ADMIN"]}><ManagementPage resource="vehicles" /></Shell>} />
         <Route path="vehicles/:id/history" element={<Shell roles={["TRANSPORT_ADMIN"]}><AssetHistory asset="vehicle" /></Shell>} />
