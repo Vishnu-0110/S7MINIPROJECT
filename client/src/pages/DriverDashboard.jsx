@@ -1,6 +1,6 @@
 import { AlertTriangle, Fuel, KeyRound, Navigation } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import LoadingState from "../components/LoadingState.jsx";
 import { useApiResource } from "../hooks/useApiResource.js";
 import { api } from "../lib/api.js";
@@ -57,20 +57,39 @@ export default function DriverDashboard() {
 function TripActionCard({ trip, reload }) {
   const isActive = ["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status);
   const isCompletionPending = trip.status === "TRIP_COMPLETION_PENDING";
+  const [incidentPanelOpen, setIncidentPanelOpen] = useState(false);
+  const [incidentKind, setIncidentKind] = useState("ACCIDENT");
+  const [incidentDetails, setIncidentDetails] = useState("");
+  const [incidentBusy, setIncidentBusy] = useState(false);
+  const [message, setMessage] = useState("");
 
-  async function reportEmergency() {
-    if (!window.confirm("Send an emergency alert to transport operations?")) return;
+  async function submitIncident() {
+    const labels = { ACCIDENT: "Accident", TRAFFIC: "Traffic delay", BREAKDOWN: "Vehicle breakdown", OTHER: "Other emergency" };
+    const details = incidentDetails.trim() || `${labels[incidentKind]} reported by the driver.`;
+    setIncidentBusy(true);
     try {
-      await api.post("/emergencies", {
-        tripId: trip._id,
-        vehicleId: trip.vehicleId?._id,
-        driverId: trip.driverId?._id,
-        message: "Driver emergency button pressed",
-        location: await currentLocation()
-      });
-      window.alert("Emergency alert sent to transport operations.");
+      const location = await currentLocation();
+      if (incidentKind === "BREAKDOWN") {
+        await api.post("/breakdowns", { tripId: trip._id, message: details, severity: "HIGH", location });
+        setMessage("Breakdown reported. Transport operations will arrange a replacement vehicle and driver.");
+      } else {
+        await api.post("/emergencies", {
+          tripId: trip._id,
+          vehicleId: trip.vehicleId?._id,
+          driverId: trip.driverId?._id,
+          message: `${labels[incidentKind]}: ${details}`,
+          severity: incidentKind === "ACCIDENT" ? "CRITICAL" : "HIGH",
+          location
+        });
+        setMessage(`${labels[incidentKind]} alert sent to transport operations.`);
+      }
+      setIncidentPanelOpen(false);
+      setIncidentDetails("");
+      await reload();
     } catch (error) {
-      window.alert(error.message);
+      setMessage(error.message);
+    } finally {
+      setIncidentBusy(false);
     }
   }
 
@@ -101,8 +120,10 @@ function TripActionCard({ trip, reload }) {
       <div className="mt-4 flex flex-wrap gap-2">
         <Link className="btn btn-primary btn-sm" to={`/trips/${trip._id}`}><KeyRound className="h-4 w-4" /> {isActive ? "Open trip" : isCompletionPending ? "Open completion OTP" : "Enter OTP & start"}</Link>
         {isActive ? <button className="btn btn-secondary btn-sm" onClick={sendLocation}><Navigation className="h-4 w-4" /> Share location</button> : null}
-        {!isCompletionPending ? <button className="btn btn-error btn-sm" onClick={reportEmergency}><AlertTriangle className="h-4 w-4" /> Emergency</button> : null}
+        {!isCompletionPending ? <button className="btn btn-error btn-sm" onClick={() => setIncidentPanelOpen((open) => !open)} disabled={incidentBusy}><AlertTriangle className="h-4 w-4" /> Emergency alert</button> : null}
       </div>
+      {message ? <div className="alert mt-4">{message}</div> : null}
+      {!isCompletionPending && incidentPanelOpen ? <div className="mt-4 rounded-xl border border-error/30 bg-error/5 p-4"><p className="font-semibold text-error">Report an incident</p><p className="mt-1 text-sm text-slate-600">Choose the situation so transport operations can respond correctly.</p><div className="mt-3 grid grid-cols-2 gap-2">{[["ACCIDENT", "Accident"], ["TRAFFIC", "Traffic"], ["BREAKDOWN", "Breakdown"], ["OTHER", "Other"]].map(([value, label]) => <button key={value} type="button" className={`btn btn-sm ${incidentKind === value ? "btn-error" : "btn-outline"}`} onClick={() => setIncidentKind(value)} disabled={incidentBusy}>{label}</button>)}</div><textarea className="textarea textarea-bordered mt-3 w-full" value={incidentDetails} onChange={(event) => setIncidentDetails(event.target.value)} placeholder="Add details for transport operations (optional)" disabled={incidentBusy} /><div className="mt-3 flex gap-2"><button className="btn btn-ghost flex-1" onClick={() => setIncidentPanelOpen(false)} disabled={incidentBusy}>Cancel</button><button className="btn btn-error flex-1" onClick={submitIncident} disabled={incidentBusy}>{incidentBusy ? "Sending…" : incidentKind === "BREAKDOWN" ? "Report breakdown" : "Send alert"}</button></div></div> : null}
     </article>
   );
 }
