@@ -14,6 +14,7 @@ export default function TripDetails() {
   const [tripOtp, setTripOtp] = useState("");
   const [completionOtp, setCompletionOtp] = useState("");
   const [completionBusy, setCompletionBusy] = useState(false);
+  const [replacementOtpBusy, setReplacementOtpBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ startKM: "", endKM: "", rating: "", feedback: "" });
   const [loading, setLoading] = useState(true);
@@ -91,6 +92,25 @@ export default function TripDetails() {
     } catch (error) {
       setMessage(error.message);
       return false;
+    }
+  }
+
+  async function verifyReplacementOtp() {
+    if (replacementOtpBusy) return;
+    const otp = form.startOtp?.trim();
+    if (!/^\d{6}$/.test(otp || "")) {
+      setMessage("Enter the six-digit replacement OTP supplied by the faculty member.");
+      return;
+    }
+    setReplacementOtpBusy(true);
+    try {
+      const verified = await verify(otp);
+      if (verified) {
+        setForm((current) => ({ ...current, startOtp: "" }));
+        setMessage("Replacement OTP verified. This trip has resumed with the new vehicle and driver.");
+      }
+    } finally {
+      setReplacementOtpBusy(false);
     }
   }
 
@@ -257,7 +277,7 @@ export default function TripDetails() {
             <div className="mt-4 space-y-3">
               <div className="rounded-xl bg-primary/5 p-3 text-sm font-medium text-primary">Enter the six-digit OTP shown in the faculty portal. For a replacement trip, enter the refreshed OTP.</div>
               <input className="input input-bordered w-full text-center font-mono text-2xl tracking-[0.3em]" inputMode="numeric" maxLength="6" value={form.startOtp || ""} onChange={(event) => setForm((current) => ({ ...current, startOtp: event.target.value.replace(/\D/g, "").slice(0, 6) }))} placeholder="000000" aria-label="Trip OTP" />
-              {trip.status !== "SCHEDULED" ? <button className="btn btn-primary w-full" onClick={() => verify(form.startOtp?.trim())}><KeyRound className="h-4 w-4" /> Verify replacement OTP</button> : null}
+              {trip.status !== "SCHEDULED" ? <button className="btn btn-primary w-full" onClick={verifyReplacementOtp} disabled={replacementOtpBusy}><KeyRound className="h-4 w-4" /> {replacementOtpBusy ? "Verifying replacement OTP…" : "Verify replacement OTP"}</button> : null}
             </div>
           ) : null}
         </div>
@@ -274,7 +294,7 @@ export default function TripDetails() {
               </> : null}
               {["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status) ? <button className="btn btn-error w-full" onClick={() => reportIncident("breakdown")} disabled={incidentBusy}><Wrench className="h-4 w-4" /> Report breakdown</button> : null}
               {["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED", "TRANSFER_OR_VERIFICATION_PENDING"].includes(trip.status) ? <button className="btn btn-error btn-outline w-full" onClick={() => reportIncident("emergency")} disabled={incidentBusy}><AlertTriangle className="h-4 w-4" /> Emergency alert</button> : null}
-              {trip.status === "TRIP_STARTED" ? <>
+              {["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status) ? <>
                 <input className="input input-bordered w-full" min={trip.startKM || 0} type="number" value={form.endKM} onChange={(event) => setForm((current) => ({ ...current, endKM: event.target.value }))} placeholder="Ending odometer (KM)" />
                 <button className="btn btn-error w-full" onClick={end} disabled={!form.endKM}>Continue to faculty confirmation</button>
               </> : null}
