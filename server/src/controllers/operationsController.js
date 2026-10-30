@@ -14,8 +14,15 @@ function listFor(Model, baseQuery = {}) {
     for (const field of ["vehicleId", "tripId", "category", "status", "isRead"]) {
       if (req.query[field]) query[field] = req.query[field];
     }
+    const recordsQuery = Model.find(query);
+    // Only fuel and expense schemas contain these references. Populating them
+    // on Notifications (or other operational models) throws StrictPopulateError
+    // and was the source of the dashboard-wide 500 response.
+    if (["FuelLog", "Expense"].includes(Model.modelName)) {
+      recordsQuery.populate("vehicleId", "vehicleId registrationNumber").populate("tripId", "tripId destination");
+    }
     const [data, total] = await Promise.all([
-      Model.find(query).populate("vehicleId", "vehicleId registrationNumber").populate("tripId", "tripId destination").sort({ createdAt: -1 }).skip(skip).limit(limit),
+      recordsQuery.sort({ createdAt: -1 }).skip(skip).limit(limit),
       Model.countDocuments(query)
     ]);
     return ok(res, "List", data, 200, { pagination: paginationPayload(page, limit, total) });
