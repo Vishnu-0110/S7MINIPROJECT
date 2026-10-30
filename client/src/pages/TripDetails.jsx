@@ -122,9 +122,6 @@ export default function TripDetails() {
       setMessage("Enter a valid starting kilometre reading before starting the trip.");
       return;
     }
-    // Open a tab from the driver's click before async GPS/API work, so mobile
-    // browsers can allow the navigation handoff after the trip starts.
-    const navigationTab = window.open("about:blank", "_blank");
     try {
       const location = await currentLocation();
       await api.post(`/trips/${id}/start`, {
@@ -132,13 +129,10 @@ export default function TripDetails() {
         otp,
         location
       });
-      setMessage("Trip started. You can now share GPS updates.");
-      if (navigationTab) {
-        navigationTab.location.href = tripNavigationUrl(trip.destination, location);
-      }
-      await load();
+      // Navigate only after the start request succeeds. Using the current tab
+      // avoids leaving the driver on an about:blank popup on mobile browsers.
+      window.location.assign(tripNavigationUrl(trip.destination, location));
     } catch (error) {
-      navigationTab?.close();
       setMessage(error.message);
     }
   }
