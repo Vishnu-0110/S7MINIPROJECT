@@ -30,8 +30,8 @@ operationRoutes.get("/maintenance", requireRoles("TRANSPORT_ADMIN"), asyncHandle
 operationRoutes.post("/maintenance", requireRoles("TRANSPORT_ADMIN"), asyncHandler(createMaintenance));
 operationRoutes.get("/fuel", requireRoles("DRIVER", "TRANSPORT_ADMIN"), asyncHandler(listFuel));
 operationRoutes.post("/fuel", requireRoles("DRIVER", "TRANSPORT_ADMIN"), asyncHandler(createFuel));
-operationRoutes.get("/expenses", requireRoles("TRANSPORT_ADMIN"), asyncHandler(listExpenses));
-operationRoutes.post("/expenses", requireRoles("TRANSPORT_ADMIN"), asyncHandler(createExpense));
+operationRoutes.get("/expenses", requireRoles("DRIVER", "TRANSPORT_ADMIN"), asyncHandler(listExpenses));
+operationRoutes.post("/expenses", requireRoles("DRIVER", "TRANSPORT_ADMIN"), asyncHandler(createExpense));
 operationRoutes.get("/notifications", asyncHandler(listNotifications));
 operationRoutes.patch("/notifications/:id/read", asyncHandler(markNotificationRead));
 operationRoutes.patch("/notifications/read-all", asyncHandler(markAllNotificationsRead));

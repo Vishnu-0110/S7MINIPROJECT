@@ -9,6 +9,7 @@ import { formatIndiaDateTime } from "../lib/dateTime.js";
 
 export default function Reports() {
   const { data: trips, loading, error } = useApiResource("/trips?limit=50");
+  const { data: costs, loading: costsLoading, error: costsError } = useApiResource("/reports/trip-costs");
   const token = useAuthStore((state) => state.token);
   const [message, setMessage] = useState("");
 
@@ -53,6 +54,22 @@ export default function Reports() {
       </div>
       {error ? <div className="alert alert-error">{error}</div> : null}
       {message ? <div className="alert alert-error">{message}</div> : null}
+      {costsError ? <div className="alert alert-error">{costsError}</div> : null}
+      <section className="space-y-3">
+        <div><p className="page-kicker">Financial view</p><h3 className="text-lg font-semibold">Trip cost summary</h3><p className="page-description">Fuel and other expenses are calculated from records linked to each trip.</p></div>
+        {costsLoading ? <LoadingState label="Loading trip costs" /> : <DataTable rows={costs || []} columns={[
+          { key: "tripId", label: "Trip" },
+          { key: "vehicle", label: "Vehicle" },
+          { key: "driver", label: "Driver" },
+          { key: "distance", label: "KM", render: (row) => row.distance ? `${row.distance} km` : "—" },
+          { key: "fuelCost", label: "Fuel", render: (row) => `₹${row.fuelCost.toFixed(2)}` },
+          { key: "otherExpenses", label: "Other", render: (row) => `₹${row.otherExpenses.toFixed(2)}` },
+          { key: "totalCost", label: "Total", render: (row) => `₹${row.totalCost.toFixed(2)}` },
+          { key: "costPerKm", label: "Cost/KM", render: (row) => row.costPerKm === null ? "—" : `₹${row.costPerKm.toFixed(2)}` }
+        ]} />}
+      </section>
+      <section className="space-y-3">
+        <div><p className="page-kicker">Operational view</p><h3 className="text-lg font-semibold">Trip register</h3></div>
       <DataTable
         rows={trips}
         columns={[
@@ -67,6 +84,7 @@ export default function Reports() {
           { key: "status", label: "Status" }
         ]}
       />
+      </section>
     </section>
   );
 }

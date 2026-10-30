@@ -15,7 +15,7 @@ function listFor(Model, baseQuery = {}) {
       if (req.query[field]) query[field] = req.query[field];
     }
     const [data, total] = await Promise.all([
-      Model.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Model.find(query).populate("vehicleId", "vehicleId registrationNumber").populate("tripId", "tripId destination").sort({ createdAt: -1 }).skip(skip).limit(limit),
       Model.countDocuments(query)
     ]);
     return ok(res, "List", data, 200, { pagination: paginationPayload(page, limit, total) });
@@ -56,7 +56,10 @@ export const listFuel = async (req, res) => {
   if (req.user.role === "DRIVER") return listFor(FuelLog, { enteredBy: req.user._id })(req, res);
   return listFor(FuelLog)(req, res);
 };
-export const listExpenses = listFor(Expense);
+export const listExpenses = async (req, res) => {
+  if (req.user.role === "DRIVER") return listFor(Expense, { enteredBy: req.user._id })(req, res);
+  return listFor(Expense)(req, res);
+};
 export const listNotifications = async (req, res) => listFor(Notification, { userId: req.user._id })(req, res);
 export async function listGps(req, res) {
   const { page, limit, skip } = parsePagination(req.query);
@@ -132,12 +135,14 @@ export async function createFuel(req, res) {
   }
   if (req.user.role === "DRIVER") {
     const driver = await Driver.findOne({ userId: req.user._id });
-    const trip = req.body.tripId ? await Trip.findOne({ _id: req.body.tripId, driverId: driver?._id }) : null;
-    if (!driver || !trip || (req.body.vehicleId && String(req.body.vehicleId) !== String(trip.vehicleId))) {
-      const error = new Error("Drivers can only record fuel for their assigned trips.");
+    const trip = driver ? await Trip.findOne({ driverId: driver._id, status: { $in: ["TRIP_STARTED", "TRIP_RESUMED"] } }).sort({ startTime: -1 }) : null;
+    if (!driver || !trip) {
+      const error = new Error("Fuel can be recorded only while you have an active assigned trip.");
       error.status = 403;
       throw error;
     }
+    req.body.tripId = trip._id;
+    req.body.vehicleId = trip.vehicleId;
   }
   const totalAmount = req.body.totalAmount || req.body.quantity * req.body.pricePerLiter;
   if (totalAmount !== undefined && (!Number.isFinite(Number(totalAmount)) || Number(totalAmount) < 0)) {
@@ -175,6 +180,22 @@ export async function createExpense(req, res) {
   const amount = Number(req.body.amount);
   if (!Number.isFinite(amount) || amount < 0) {
     const error = new Error("Expense amount must be a non-negative number.");
+    error.status = 400;
+    throw error;
+  }
+  if (req.user.role === "DRIVER") {
+    const driver = await Driver.findOne({ userId: req.user._id });
+    const trip = driver ? await Trip.findOne({ driverId: driver._id, status: { $in: ["TRIP_STARTED", "TRIP_RESUMED"] } }).sort({ startTime: -1 }) : null;
+    if (!trip) {
+      const error = new Error("Expenses can be recorded only while you have an active assigned trip.");
+      error.status = 403;
+      throw error;
+    }
+    req.body.tripId = trip._id;
+    req.body.vehicleId = trip.vehicleId;
+  }
+  if (!req.body.tripId && !req.body.vehicleId) {
+    const error = new Error("Choose a trip or vehicle for this expense.");
     error.status = 400;
     throw error;
   }

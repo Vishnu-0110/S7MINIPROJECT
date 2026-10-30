@@ -71,6 +71,11 @@ export default function OperationsPage({ resource }) {
   const [options, setOptions] = useState({ vehicles: [], trips: [], drivers: [] });
   const user = useAuthStore((state) => state.user);
   const canAdd = resource !== "emergencies";
+  const formFields = user?.role === "DRIVER" && resource === "fuel"
+    ? cfg.fields.filter((field) => !["vehicleId", "tripId"].includes(field))
+    : user?.role === "DRIVER" && resource === "expenses"
+      ? cfg.fields.filter((field) => !["vehicleId", "tripId"].includes(field))
+      : cfg.fields;
   const [alarmEnabled, setAlarmEnabled] = useState(false);
   const alarmTimerRef = useRef(null);
 
@@ -190,7 +195,8 @@ export default function OperationsPage({ resource }) {
       {canAdd ? <aside className="workspace-side-panel rounded-lg border border-slate-200 bg-white p-5">
         <h3 className="font-semibold">Add record</h3>
         <form className="mt-4 space-y-3" onSubmit={submit}>
-          {cfg.fields.map((field) => <OperationField key={field} field={field} form={form} setForm={setForm} options={options} />)}
+          {user?.role === "DRIVER" && ["fuel", "expenses"].includes(resource) ? <p className="text-sm text-slate-500">Your active trip, vehicle, and driver are attached automatically when you save this record.</p> : null}
+          {formFields.map((field) => <OperationField key={field} field={field} form={form} setForm={setForm} options={options} />)}
           {message ? <p className="text-sm text-slate-500">{message}</p> : null}
           <button className="btn btn-primary w-full">
             <Plus className="h-4 w-4" />

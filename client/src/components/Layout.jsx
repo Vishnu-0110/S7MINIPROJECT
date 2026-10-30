@@ -34,6 +34,7 @@ const nav = [
   { to: "/request/new", label: "New Request", icon: Bus, group: "main", roles: ["FACULTY_STAFF"] },
   { to: "/trips", label: "Trips", icon: KeyRound, group: "main" },
   { to: "/fuel", label: "Fuel Log", icon: Fuel, group: "main", roles: ["DRIVER"] },
+  { to: "/expenses", label: "Trip Expenses", icon: FileText, group: "main", roles: ["DRIVER"] },
   { to: "/driver-leaves", label: "Leave Request", icon: FileText, group: "main", roles: ["DRIVER"] },
   { to: "/vehicles", label: "Vehicles", icon: Bus, group: "manage", roles: ["TRANSPORT_ADMIN"] },
   { to: "/drivers", label: "Drivers", icon: Users, group: "manage", roles: ["TRANSPORT_ADMIN"] },
