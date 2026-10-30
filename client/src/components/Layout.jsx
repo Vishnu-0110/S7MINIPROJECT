@@ -9,6 +9,9 @@ import {
   KeyRound,
   LogOut,
   Map,
+  Monitor,
+  Moon,
+  Sun,
   ShieldAlert,
   FileText,
   Users,
@@ -18,10 +21,11 @@ import {
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore.js";
-import { api } from "../lib/api.js";
 import { connectSocket } from "../lib/socket.js";
 import { useScrollLock } from "../hooks/useScrollLock.js";
 import { useToastStore } from "../store/toastStore.js";
+import { useNotificationStore } from "../store/notificationStore.js";
+import { useThemeStore } from "../store/themeStore.js";
 
 const nav = [
   { to: "/", label: "Overview", icon: LayoutDashboard, group: "main", roles: ["FACULTY_STAFF", "TRANSPORT_ADMIN", "DEPARTMENT_COORDINATOR"] },
@@ -54,8 +58,15 @@ export default function Layout() {
   const managementNav = visibleNav.filter((item) => item.group === "manage");
   const moreNav = visibleNav.filter((item) => item.group === "more");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const pushToast = useToastStore((state) => state.push);
+  const notifications = useNotificationStore((state) => state.notifications);
+  const loadNotifications = useNotificationStore((state) => state.load);
+  const receiveNotification = useNotificationStore((state) => state.receive);
+  const applyRead = useNotificationStore((state) => state.applyRead);
+  const applyAllRead = useNotificationStore((state) => state.applyAllRead);
+  const themePreference = useThemeStore((state) => state.preference);
+  const setThemePreference = useThemeStore((state) => state.setPreference);
+  const unreadCount = notifications.filter((notification) => !notification.isRead).length;
   const groupIsActive = (items) => items.some((item) => item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to));
 
   useEffect(() => {
@@ -74,27 +85,28 @@ export default function Layout() {
   }, [location.pathname]);
 
   useEffect(() => {
-    let active = true;
-    api.get("/notifications?limit=100")
-      .then((result) => {
-        if (active) setUnreadCount((result.data || []).filter((notification) => !notification.isRead).length);
-      })
-      .catch(() => undefined);
+    if (!user?._id) return undefined;
+    loadNotifications(user._id, true);
     const socket = connectSocket();
-    const onNotification = () => setUnreadCount((count) => count + 1);
+    const onNotification = (notification) => receiveNotification(notification);
+    const onRead = (notification) => applyRead(notification);
+    const onAllRead = () => applyAllRead();
     socket.on("notification:new", onNotification);
+    socket.on("notification:read", onRead);
+    socket.on("notifications:read-all", onAllRead);
     return () => {
-      active = false;
       socket.off("notification:new", onNotification);
+      socket.off("notification:read", onRead);
+      socket.off("notifications:read-all", onAllRead);
     };
-  }, []);
+  }, [user?._id, loadNotifications, receiveNotification, applyRead, applyAllRead]);
 
   return (
     <div className="app-shell">
       <div className="drawer h-full min-h-0 overflow-hidden lg:drawer-open">
         <input id="main-drawer" type="checkbox" className="drawer-toggle" checked={menuOpen} onChange={(event) => setMenuOpen(event.target.checked)} />
         <div className="drawer-content flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-          <header className="z-20 flex shrink-0 min-h-[72px] items-center justify-between border-b border-slate-200/70 bg-white/80 px-4 py-2 backdrop-blur-xl lg:px-8">
+          <header className="app-header z-20 flex shrink-0 min-h-[72px] items-center justify-between px-4 py-2 lg:px-8">
             <label htmlFor="main-drawer" className="btn btn-square btn-ghost rounded-xl lg:hidden" aria-label="Open menu" aria-expanded={menuOpen}>
               <Bus className="h-5 w-5" />
             </label>
@@ -103,9 +115,17 @@ export default function Layout() {
               <h1 className="truncate text-lg font-bold text-slate-950">Transport management</h1>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
+              <label className="theme-picker flex" aria-label="Theme preference">
+                {themePreference === "light" ? <Sun className="h-4 w-4" /> : themePreference === "dark" ? <Moon className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
+                <select value={themePreference} onChange={(event) => setThemePreference(event.target.value)} aria-label="Theme preference">
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                  <option value="system">System</option>
+                </select>
+              </label>
               <NavLink className="btn btn-square btn-ghost relative rounded-xl" to="/notifications" aria-label={unreadCount ? `${unreadCount} unread notifications` : "Notifications"}><Bell className="h-5 w-5" />{unreadCount ? <span className="badge badge-primary badge-xs absolute -right-1 -top-1">{unreadCount > 99 ? "99+" : unreadCount}</span> : null}</NavLink>
               <div className="hidden items-center gap-3 border-l border-slate-200 pl-3 sm:flex">
-                <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-primary to-secondary text-sm font-bold text-white">{user?.name?.slice(0, 1)?.toUpperCase() || "U"}</div>
+                <div className="grid h-9 w-9 place-items-center rounded-full bg-primary text-sm font-bold text-white">{user?.name?.slice(0, 1)?.toUpperCase() || "U"}</div>
                 <div className="max-w-32">
                   <p className="truncate text-sm font-semibold text-slate-800">{user?.name}</p>
                   <p className="truncate text-[11px] font-medium text-slate-500">{user?.role?.replaceAll("_", " ")}</p>
@@ -123,7 +143,7 @@ export default function Layout() {
           <aside className="flex h-full min-h-0 w-[min(18rem,calc(100vw-1rem))] flex-col bg-slate-950 p-4 text-slate-300">
             <div className="mb-8 flex items-center justify-between gap-3 px-2 pt-2">
               <div className="flex min-w-0 items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 to-primary text-white shadow-lg shadow-primary/30">
+              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/20">
                 <Bus className="h-5 w-5" strokeWidth={2.5} />
               </div>
               <div className="min-w-0">
@@ -169,7 +189,7 @@ function NavigationItems({ items, onNavigate }) {
         to={item.to}
         onClick={onNavigate}
         className={({ isActive }) =>
-          `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${isActive ? "bg-gradient-to-r from-primary to-teal-600 text-white shadow-lg shadow-primary/20" : "text-slate-300 hover:bg-white/10 hover:text-white"}`
+          `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${isActive ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-slate-300 hover:bg-white/10 hover:text-white"}`
         }
       >
         <Icon className="h-4 w-4 transition-transform group-hover:scale-110" />

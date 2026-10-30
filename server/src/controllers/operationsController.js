@@ -161,11 +161,13 @@ export async function markNotificationRead(req, res) {
     error.status = 404;
     throw error;
   }
+  req.app.get("io")?.to(`user-room-${req.user._id}`).emit("notification:read", notification);
   return ok(res, "Notification marked as read", notification);
 }
 
 export async function markAllNotificationsRead(req, res) {
   const result = await Notification.updateMany({ userId: req.user._id, isRead: false }, { isRead: true });
+  req.app.get("io")?.to(`user-room-${req.user._id}`).emit("notifications:read-all", { updated: result.modifiedCount });
   return ok(res, "All notifications marked as read", { updated: result.modifiedCount });
 }
 
