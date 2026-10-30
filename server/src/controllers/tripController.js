@@ -1,7 +1,7 @@
 import { Driver, Trip, VehicleRequest } from "../models/index.js";
 import { ApiError, ok } from "../utils/apiResponse.js";
 import { parsePagination, paginationPayload } from "../utils/pagination.js";
-import { cancelScheduledTrip, completeTrip, createTripFromAssignment, generateCompletionOtp, generateTripOtp, requestTripCompletion, saveGps, startTrip, verifyQr } from "../services/tripService.js";
+import { cancelScheduledTrip, completeTrip, createTripFromAssignment, generateCompletionOtp, generateTripOtp, requestTripCompletion, resumeReplacementTrip, saveGps, startTrip, verifyQr } from "../services/tripService.js";
 import { indiaDayRange, isTodayInIndia } from "../utils/indiaTime.js";
 
 export async function assignTrip(req, res) {
@@ -103,6 +103,10 @@ export async function tripOtp(req, res) {
 export async function verifyTripOtp(req, res) {
   const driver = await Driver.findOne({ userId: req.user._id });
   return ok(res, "OTP verified", await verifyQr({ tripId: req.params.id, qrToken: req.body.otp, driver }));
+}
+
+export async function resumeReplacementOtp(req, res) {
+  return ok(res, "Replacement OTP verified. The trip has resumed.", await resumeReplacementTrip({ tripId: req.params.id, actor: req.user, otp: req.body.otp }));
 }
 
 export async function startTripAction(req, res) {

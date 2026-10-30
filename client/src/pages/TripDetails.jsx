@@ -104,11 +104,12 @@ export default function TripDetails() {
     }
     setReplacementOtpBusy(true);
     try {
-      const verified = await verify(otp);
-      if (verified) {
-        setForm((current) => ({ ...current, startOtp: "" }));
-        setMessage("Replacement OTP verified. This trip has resumed with the new vehicle and driver.");
-      }
+      await api.post(`/trips/${id}/replacement-otp/verify`, { otp });
+      setForm((current) => ({ ...current, startOtp: "" }));
+      setMessage("Replacement OTP verified. This trip has resumed with the new vehicle and driver.");
+      await load();
+    } catch (error) {
+      setMessage(error.message || "The replacement OTP could not be verified.");
     } finally {
       setReplacementOtpBusy(false);
     }

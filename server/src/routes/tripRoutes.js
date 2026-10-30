@@ -8,6 +8,7 @@ import {
   getTrip,
   gpsAction,
   listTrips,
+  resumeReplacementOtp,
   startTripAction,
   tripOtp,
   verifyTripOtp
@@ -25,6 +26,7 @@ tripRoutes.get("/summary", requireRoles("TRANSPORT_ADMIN"), asyncHandler(activeT
 tripRoutes.get("/:id", asyncHandler(getTrip));
 tripRoutes.get("/:id/otp", asyncHandler(tripOtp));
 tripRoutes.post("/:id/otp/verify", requireRoles("DRIVER"), validate(otpVerifySchema), asyncHandler(verifyTripOtp));
+tripRoutes.post("/:id/replacement-otp/verify", requireRoles("DRIVER"), validate(otpVerifySchema), asyncHandler(resumeReplacementOtp));
 tripRoutes.post("/:id/start", requireRoles("DRIVER"), validate(startTripSchema), asyncHandler(startTripAction));
 tripRoutes.post("/:id/end", requireRoles("DRIVER"), validate(endTripSchema), asyncHandler(endTripAction));
 tripRoutes.post("/:id/cancel", requireRoles("TRANSPORT_ADMIN"), asyncHandler(cancelTripAction));

@@ -395,6 +395,42 @@ export async function verifyQr({ tripId, qrToken, driver }) {
   return verified;
 }
 
+export async function resumeReplacementTrip({ tripId, actor, otp }) {
+  const driver = await Driver.findOne({ userId: actor._id });
+  const trip = await Trip.findById(tripId).select("+qrToken");
+  if (!driver || !trip || String(trip.driverId) !== String(driver._id)) {
+    const error = new Error("You are not the replacement driver assigned to this trip.");
+    error.status = 403;
+    throw error;
+  }
+  if (!["TRANSFER_OR_VERIFICATION_PENDING", "REPLACEMENT_ASSIGNED"].includes(trip.status)) {
+    const error = new Error("This trip is not waiting for replacement-driver verification.");
+    error.status = 409;
+    throw error;
+  }
+  if (trip.qrToken !== otp || trip.qrConsumed || !trip.qrExpiresAt || trip.qrExpiresAt <= new Date()) {
+    const error = new Error("The replacement OTP is invalid, expired, or already used. Ask the faculty member to refresh the trip page for a new OTP.");
+    error.status = 400;
+    throw error;
+  }
+  const resumed = await Trip.findOneAndUpdate(
+    { _id: trip._id, status: trip.status, qrToken: otp, qrConsumed: false, qrExpiresAt: { $gt: new Date() } },
+    { status: "TRIP_RESUMED", replacementStatus: "NONE", qrVerifiedAt: new Date(), qrConsumed: true },
+    { new: true }
+  );
+  if (!resumed) {
+    const error = new Error("The replacement OTP was already used. Refresh this page to see the current trip status.");
+    error.status = 409;
+    throw error;
+  }
+  await Vehicle.findByIdAndUpdate(resumed.vehicleId, { status: "IN_TRIP" });
+  await Driver.findByIdAndUpdate(driver._id, { status: "IN_TRIP" });
+  await notifyTripParticipants(resumed, "Trip resumed", `Trip ${resumed.tripId} resumed with its replacement vehicle and driver.`);
+  emit(`trip-room-${resumed._id}`, "trip:resumed", resumed);
+  emit("admin-room", "trip:resumed", resumed);
+  return resumed;
+}
+
 export async function startTrip({ tripId, actor, startKM, qrToken, location }) {
   const driver = await Driver.findOne({ userId: actor._id });
   const trip = await Trip.findById(tripId).select("+qrToken");
