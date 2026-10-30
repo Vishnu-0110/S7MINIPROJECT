@@ -1,15 +1,15 @@
 import { AlertTriangle, KeyRound, Navigation, Star } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import LoadingState from "../components/LoadingState.jsx";
 import { api } from "../lib/api.js";
 import { useAuthStore } from "../store/authStore.js";
 import { formatIndiaDateTime } from "../lib/dateTime.js";
+import { googleMapsDirectionsUrl } from "../lib/navigation.js";
 import { connectSocket } from "../lib/socket.js";
 
 export default function TripDetails() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const [trip, setTrip] = useState(null);
   const [tripOtp, setTripOtp] = useState("");
@@ -129,7 +129,7 @@ export default function TripDetails() {
         otp,
         location
       });
-      navigate(`/trips/${id}/navigation`);
+      window.location.assign(googleMapsDirectionsUrl(trip.destination, location));
     } catch (error) {
       setMessage(error.message);
     }
@@ -302,7 +302,7 @@ export default function TripDetails() {
                   <button className="btn btn-primary mt-3 w-full" onClick={submitStartOtp}><KeyRound className="h-4 w-4" /> Verify OTP and start trip</button>
                 </div>
               </> : null}
-              {["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status) ? <Link className="btn btn-secondary w-full" to={`/trips/${id}/navigation`}><Navigation className="h-4 w-4" /> Navigate to destination</Link> : null}
+              {["TRIP_STARTED", "TRIP_RESUMED"].includes(trip.status) ? <a className="btn btn-secondary w-full" href={googleMapsDirectionsUrl(trip.destination)}><Navigation className="h-4 w-4" /> Navigate to destination</a> : null}
               {["SCHEDULED", "TRIP_STARTED", "TRIP_RESUMED", "TRANSFER_OR_VERIFICATION_PENDING"].includes(trip.status) ? (
                 incidentPanelOpen ? (
                   <div className="rounded-xl border border-error/30 bg-error/5 p-4">
